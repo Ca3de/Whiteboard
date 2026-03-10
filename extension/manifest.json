@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "Whiteboard Connector",
+  "version": "1.0.0",
+  "description": "Syncs tag permissions from the work network to the Whiteboard",
+  "permissions": ["alarms", "storage"],
+  "host_permissions": [
+    "https://*.fly.dev/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html"
+  }
+}
