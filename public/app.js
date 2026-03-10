@@ -209,6 +209,10 @@ let resizeStart = { x: 0, y: 0, w: 0, h: 0 };
 let paletteDragTag = null; // { id, label, el (ghost) }
 let paletteDragPos = { x: 0, y: 0 };
 
+function getInitials(name) {
+  return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+}
+
 const BOX_COLORS = ['box-red', 'box-blue', 'box-green', 'box-orange', 'box-purple', 'box-teal'];
 const NOTE_COLORS = ['note-yellow', 'note-pink', 'note-blue', 'note-green', 'note-purple'];
 let boxColorIndex = 0;
@@ -277,7 +281,7 @@ function renderTagPalette() {
     const el = document.createElement('div');
     const isPlaced = State.isTagPlaced(tag.id);
     el.className = 'palette-tag' + (isPlaced ? ' placed' : '');
-    el.textContent = tag.label;
+    el.innerHTML = `<span class="badge-icon">${getInitials(tag.label)}</span><span>${escapeHtml(tag.label)}</span>`;
     el.dataset.tagId = tag.id;
 
     if (!isPlaced) {
@@ -297,7 +301,7 @@ function startPaletteDrag(tag, e) {
   // Create a ghost element that follows the mouse
   const ghost = document.createElement('div');
   ghost.className = 'board-tag';
-  ghost.textContent = tag.label;
+  ghost.innerHTML = `<span class="badge-icon">${getInitials(tag.label)}</span><span>${escapeHtml(tag.label)}</span>`;
   ghost.style.position = 'fixed';
   ghost.style.left = e.clientX - 30 + 'px';
   ghost.style.top = e.clientY - 12 + 'px';
@@ -575,7 +579,7 @@ function renderObjects() {
     el.dataset.tagId = tag.id;
     el.style.left = tag.x + 'px';
     el.style.top = tag.y + 'px';
-    el.innerHTML = `<span>${escapeHtml(tag.label)}</span><button class="tag-remove-btn">&times;</button>`;
+    el.innerHTML = `<span class="badge-icon">${getInitials(tag.label)}</span><span>${escapeHtml(tag.label)}</span><button class="tag-remove-btn">&times;</button>`;
 
     // Drag — only if not locked by someone else
     if (!isLockedByOther) {

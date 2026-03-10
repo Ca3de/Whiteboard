@@ -12,21 +12,22 @@ class Board {
     this._texts = [];
     this._onEvent = onEvent || (() => {});
 
-    // Tags: predefined list. Each tag can be placed on the board or in the palette.
+    // Tags (badges): predefined list of associate/person badges.
+    // Each can be placed on the board or remain in the palette.
     // Placed tags have x, y coordinates. Locked tags have a lockedBy session id.
     this._availableTags = [
-      { id: 'tag-urgent', label: 'Urgent' },
-      { id: 'tag-blocked', label: 'Blocked' },
-      { id: 'tag-in-review', label: 'In Review' },
-      { id: 'tag-approved', label: 'Approved' },
-      { id: 'tag-needs-info', label: 'Needs Info' },
-      { id: 'tag-high-priority', label: 'High Priority' },
-      { id: 'tag-low-priority', label: 'Low Priority' },
-      { id: 'tag-bug', label: 'Bug' },
-      { id: 'tag-feature', label: 'Feature' },
-      { id: 'tag-tech-debt', label: 'Tech Debt' },
-      { id: 'tag-qa-ready', label: 'QA Ready' },
-      { id: 'tag-deployed', label: 'Deployed' }
+      { id: 'badge-alice', label: 'Alice Johnson' },
+      { id: 'badge-bob', label: 'Bob Martinez' },
+      { id: 'badge-carol', label: 'Carol Chen' },
+      { id: 'badge-dave', label: 'Dave Wilson' },
+      { id: 'badge-eve', label: 'Eve Nakamura' },
+      { id: 'badge-frank', label: 'Frank Osei' },
+      { id: 'badge-grace', label: 'Grace Kim' },
+      { id: 'badge-hank', label: 'Hank Patel' },
+      { id: 'badge-iris', label: 'Iris Johansson' },
+      { id: 'badge-jack', label: 'Jack Rivera' },
+      { id: 'badge-kate', label: 'Kate Murphy' },
+      { id: 'badge-leo', label: 'Leo Andersen' }
     ];
 
     // Placed tags: { id, label, x, y, lockedBy: null | sessionId }
