@@ -25,12 +25,13 @@ const EventBus = (() => {
 
 const State = {
   sessionId: null,
-  availableTags: [],  // { id, label }
+  availableTags: [],  // { id, label, employeeId? }
   placedTags: [],     // { id, label, boxId, lockedBy }
   boxes: [],
   strokes: [],
   notes: [],
   texts: [],
+  employees: [],      // { id, login, name, badge, permissions, ... }
 
   load(data) {
     this.availableTags = data.availableTags || [];
@@ -39,6 +40,7 @@ const State = {
     this.strokes = data.strokes || [];
     this.notes = data.notes || [];
     this.texts = data.texts || [];
+    this.employees = data.employees || [];
   },
 
   clear() {
@@ -47,6 +49,11 @@ const State = {
     this.strokes = [];
     this.notes = [];
     this.texts = [];
+  },
+
+  // Employees
+  getEmployee(employeeId) {
+    return this.employees.find(e => e.id === employeeId);
   },
 
   // Tags
@@ -304,11 +311,23 @@ function renderTagPalette() {
   const palette = document.getElementById('tag-palette');
   palette.innerHTML = '';
 
+  if (State.availableTags.length === 0) {
+    const empty = document.createElement('div');
+    empty.style.cssText = 'padding: 16px; color: #a0aec0; font-size: 0.78rem; text-align: center;';
+    empty.textContent = 'No employees synced yet. Use the browser extension on FCLM to add employees.';
+    palette.appendChild(empty);
+    return;
+  }
+
   State.availableTags.forEach(tag => {
     const el = document.createElement('div');
     const isPlaced = State.isTagPlaced(tag.id);
     el.className = 'palette-tag' + (isPlaced ? ' placed' : '');
-    el.innerHTML = `<span class="badge-icon">${getInitials(tag.label)}</span><span>${escapeHtml(tag.label)}</span>`;
+
+    // Show login below name if employee
+    const emp = tag.employeeId ? State.getEmployee(tag.employeeId) : null;
+    const loginHtml = emp && emp.login ? `<span class="badge-login">${escapeHtml(emp.login)}</span>` : '';
+    el.innerHTML = `<span class="badge-icon">${getInitials(tag.label)}</span><span class="badge-label-wrap"><span>${escapeHtml(tag.label)}</span>${loginHtml}</span>`;
     el.dataset.tagId = tag.id;
 
     if (!isPlaced) {
@@ -1151,6 +1170,25 @@ EventBus.on('ws:tag:lock-denied', (msg) => {
   }
 });
 
+EventBus.on('ws:tag:denied', (msg) => {
+  console.warn('[WS] Permission denied:', msg.reason);
+  showPermissionDenied(msg.reason);
+});
+
+EventBus.on('ws:tag:move-denied', (msg) => {
+  console.warn('[WS] Move denied:', msg.reason);
+  showPermissionDenied(msg.reason);
+  renderObjects();
+});
+
+EventBus.on('ws:employees:updated', (msg) => {
+  State.employees = msg.employees || [];
+  State.availableTags = msg.availableTags || [];
+  if (msg.placedTags) State.placedTags = msg.placedTags;
+  renderObjects();
+  renderTagPalette();
+});
+
 EventBus.on('ws:tag:moved', (msg) => {
   State.updatePlacedTag(msg.id, { boxId: msg.boxId });
   renderObjects();
@@ -1217,6 +1255,33 @@ EventBus.on('connection:change', (connected) => {
   el.textContent = connected ? 'Connected' : 'Reconnecting...';
   el.className = 'status ' + (connected ? 'connected' : 'disconnected');
 });
+
+// --- Permission denied toast ---
+
+function showPermissionDenied(reason) {
+  // Remove existing toast
+  const existing = document.getElementById('permission-toast');
+  if (existing) existing.remove();
+
+  const toast = document.createElement('div');
+  toast.id = 'permission-toast';
+  toast.style.cssText = `
+    position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
+    z-index: 9999; padding: 12px 24px; border-radius: 8px;
+    background: #7f1d1d; color: #fca5a5; border: 1px solid #f87171;
+    font-size: 0.85rem; font-weight: 600; font-family: -apple-system, sans-serif;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.4); max-width: 500px; text-align: center;
+    animation: toastIn 0.3s ease;
+  `;
+  toast.textContent = reason || 'Permission denied';
+  document.body.appendChild(toast);
+
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transition = 'opacity 0.3s';
+    setTimeout(() => toast.remove(), 300);
+  }, 3500);
+}
 
 // --- Init ---
 

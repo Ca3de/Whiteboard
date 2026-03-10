@@ -1,15 +1,25 @@
 {
   "manifest_version": 3,
   "name": "Whiteboard Connector",
-  "version": "1.0.0",
-  "description": "Syncs tag permissions from the work network to the Whiteboard",
+  "version": "2.0.0",
+  "description": "Syncs employee permissions from FCLM to the Whiteboard",
   "permissions": ["alarms", "storage"],
   "host_permissions": [
-    "https://*.fly.dev/*"
+    "https://*.fly.dev/*",
+    "https://fclm-portal.amazon.com/*"
   ],
   "background": {
     "service_worker": "background.js"
   },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://fclm-portal.amazon.com/*"
+      ],
+      "js": ["content/fclm-permissions.js"],
+      "run_at": "document_idle"
+    }
+  ],
   "action": {
     "default_popup": "popup.html"
   }
