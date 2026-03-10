@@ -63,28 +63,28 @@
     </div>
   </div>
 
-  <!-- Box name prompt dialog -->
+  <!-- Subprocess picker dialog (used for both create and rename) -->
   <div id="box-dialog" class="dialog-overlay" style="display:none">
-    <div class="dialog">
-      <h3>New Process Path</h3>
-      <input type="text" id="box-name-input" placeholder="Enter path name..." maxlength="40" autocomplete="off">
+    <div class="dialog picker-dialog">
+      <h3 id="picker-title">New Process Path</h3>
+      <input type="text" id="picker-search" placeholder="Search process or subprocess..." autocomplete="off">
+      <div id="picker-list" class="picker-list"></div>
       <div class="dialog-error" id="box-name-error"></div>
       <div class="dialog-actions">
         <button id="box-cancel-btn" class="btn-secondary">Cancel</button>
-        <button id="box-create-btn" class="btn-primary">Create</button>
       </div>
     </div>
   </div>
 
-  <!-- Box rename dialog -->
+  <!-- Box rename dialog (reuses picker) -->
   <div id="rename-dialog" class="dialog-overlay" style="display:none">
-    <div class="dialog">
-      <h3>Rename Process Path</h3>
-      <input type="text" id="rename-input" placeholder="New name..." maxlength="40" autocomplete="off">
+    <div class="dialog picker-dialog">
+      <h3>Change Process Path</h3>
+      <input type="text" id="rename-search" placeholder="Search process or subprocess..." autocomplete="off">
+      <div id="rename-list" class="picker-list"></div>
       <div class="dialog-error" id="rename-error"></div>
       <div class="dialog-actions">
         <button id="rename-cancel-btn" class="btn-secondary">Cancel</button>
-        <button id="rename-save-btn" class="btn-primary">Save</button>
       </div>
     </div>
   </div>

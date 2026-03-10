@@ -374,6 +374,21 @@ body {
   user-select: none;
 }
 
+.process-box .box-name-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.process-box .box-process {
+  font-size: 0.6rem;
+  font-weight: 600;
+  opacity: 0.6;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
 .process-box .box-header .box-name {
   font-weight: 700;
   font-size: 0.85rem;
@@ -631,3 +646,95 @@ body {
 }
 
 .btn-secondary:hover { background: #1a1a2e; }
+
+/* ========== Process Picker ========== */
+.picker-dialog {
+  min-width: 400px;
+  max-width: 480px;
+}
+
+.picker-list {
+  max-height: 400px;
+  overflow-y: auto;
+  margin-top: 12px;
+  border: 1px solid #0f3460;
+  border-radius: 6px;
+  background: #1a1a2e;
+}
+
+.picker-group-header {
+  padding: 8px 12px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #4a9eff;
+  background: rgba(74, 158, 255, 0.08);
+  border-bottom: 1px solid #0f3460;
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.picker-group-header::before {
+  content: '\25BE';
+  margin-right: 8px;
+  font-size: 0.7rem;
+  transition: transform 0.15s;
+}
+
+.picker-group-header.collapsed::before {
+  transform: rotate(-90deg);
+}
+
+.picker-group-items.collapsed {
+  display: none;
+}
+
+.picker-item {
+  padding: 7px 12px 7px 28px;
+  font-size: 0.82rem;
+  color: #e0e0e0;
+  cursor: pointer;
+  transition: background 0.1s;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(15, 52, 96, 0.4);
+}
+
+.picker-item:last-child {
+  border-bottom: none;
+}
+
+.picker-item:hover:not(.disabled) {
+  background: rgba(74, 158, 255, 0.12);
+}
+
+.picker-item.disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.picker-subprocess {
+  flex: 1;
+}
+
+.picker-used {
+  font-size: 0.7rem;
+  color: #f87171;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.picker-empty {
+  padding: 24px;
+  text-align: center;
+  color: #a0aec0;
+  font-size: 0.85rem;
+}
