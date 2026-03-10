@@ -548,19 +548,243 @@ document.getElementById('zoom-reset-btn').addEventListener('click', () => {
   resizeCanvas();
 });
 
-// --- Box dialog ---
+// --- Process / Subprocess data ---
+
+const PROCESS_DATA = [
+  { process: 'ADM/HR/TRAIN/IT', subprocess: 'MENU ADMIN', level: 'BEGINNER' },
+  { process: 'ADM/HR/TRAIN/IT', subprocess: 'Security', level: 'NONE' },
+  { process: 'Amtran', subprocess: 'Amtran (Sub)', level: 'NONE' },
+  { process: 'AR Support', subprocess: 'Floor Health', level: 'NONE' },
+  { process: 'AR Support', subprocess: 'RME Support', level: 'NONE' },
+  { process: 'Associate Training', subprocess: 'Training Pick', level: 'NONE' },
+  { process: 'Associate Training', subprocess: 'Training Stow', level: 'NONE' },
+  { process: 'BETA TEST ROOT', subprocess: 'BETA TEST', level: 'NONE' },
+  { process: 'COMMAND LINE/BINTOOL', subprocess: 'BINCONF', level: 'NONE' },
+  { process: 'Customer Returns', subprocess: 'C-Returns (Sub)', level: 'BEGINNER' },
+  { process: 'Customer Returns', subprocess: 'C-Returns Stow', level: 'BEGINNER' },
+  { process: 'Customer Returns', subprocess: 'C-Returns Support', level: 'EXPERT' },
+  { process: 'Decant', subprocess: 'Decanter', level: 'NONE' },
+  { process: 'Facilities', subprocess: 'Facilities (Sub)', level: 'NONE' },
+  { process: 'FC Infra', subprocess: 'LTD Internet Access', level: 'NONE' },
+  { process: 'FC Infra', subprocess: 'Open Internet Access', level: 'NONE' },
+  { process: 'IC QA CS', subprocess: 'Amnesty', level: 'NONE' },
+  { process: 'IC QA CS', subprocess: 'IC QA', level: 'NONE' },
+  { process: 'IC QA CS', subprocess: 'CS', level: 'NONE' },
+  { process: 'Inbound Prep', subprocess: 'Cubiscan', level: 'NONE' },
+  { process: 'Inbound Prep', subprocess: 'Prep', level: 'NONE' },
+  { process: 'Inbound Prep', subprocess: 'Sample Center', level: 'NONE' },
+  { process: 'On Demand', subprocess: 'Burn on Demand', level: 'NONE' },
+  { process: 'On Demand', subprocess: 'Create Your Own Ring', level: 'NONE' },
+  { process: 'On Demand', subprocess: 'On Demand Spt', level: 'NONE' },
+  { process: 'On Demand', subprocess: 'Print On Demand', level: 'NONE' },
+  { process: 'On Demand', subprocess: 'On Demand Production', level: 'NONE' },
+  { process: 'Outbound Prep', subprocess: 'GW Scanning Partners', level: 'NONE' },
+  { process: 'Outbound Prep', subprocess: 'Giftwrap', level: 'NONE' },
+  { process: 'Outbound Prep', subprocess: 'Giftwrap Support', level: 'NONE' },
+  { process: 'Outbound Prep', subprocess: 'Library Services', level: 'NONE' },
+  { process: 'Outbound Prep', subprocess: 'Scan Verify Partners', level: 'NONE' },
+  { process: 'Pack', subprocess: 'Biohazard Vials', level: 'NONE' },
+  { process: 'Pack', subprocess: 'Pack Autobox', level: 'NONE' },
+  { process: 'Pack', subprocess: 'Pack Bigs', level: 'NONE' },
+  { process: 'Pack', subprocess: 'Pack Chuting', level: 'NONE' },
+  { process: 'Pack', subprocess: 'Pack Full Case', level: 'NONE' },
+  { process: 'Pack', subprocess: 'Pack Lev/Autofold', level: 'NONE' },
+  { process: 'Pack', subprocess: 'Pack Manual SLAM', level: 'NONE' },
+  { process: 'Pack', subprocess: 'Pack Multis', level: 'NONE' },
+  { process: 'Pack', subprocess: 'Pack SLAM', level: 'NONE' },
+  { process: 'Pack', subprocess: 'Pack Singles', level: 'NONE' },
+  { process: 'Pack', subprocess: 'Pack Support', level: 'NONE' },
+  { process: 'Pack', subprocess: 'Slam At Pack', level: 'NONE' },
+  { process: 'Pack', subprocess: 'Pack Batchy SLAM', level: 'NONE' },
+  { process: 'Pack', subprocess: 'PackApp', level: 'INTERMEDIATE' },
+  { process: 'Pack', subprocess: 'PackAutomation', level: 'NONE' },
+  { process: 'Pack', subprocess: 'SimplePackTool', level: 'EXPERT' },
+  { process: 'Pick', subprocess: 'Pick Mech', level: 'NONE' },
+  { process: 'Pick', subprocess: 'Pick Paper', level: 'NONE' },
+  { process: 'Pick', subprocess: 'Pick Presort', level: 'NONE' },
+  { process: 'Pick', subprocess: 'Pick RF', level: 'BEGINNER' },
+  { process: 'Pick', subprocess: 'Pick Support', level: 'NONE' },
+  { process: 'Pick', subprocess: 'Pick Team Lift', level: 'NONE' },
+  { process: 'Pick', subprocess: 'Unwind Support', level: 'NONE' },
+  { process: 'Pick', subprocess: 'Update SLA Support', level: 'NONE' },
+  { process: 'Pick', subprocess: 'Auto Collate', level: 'NONE' },
+  { process: 'Pick', subprocess: 'Manual Collate', level: 'NONE' },
+  { process: 'Pick', subprocess: 'Pick RF Count', level: 'NONE' },
+  { process: 'Problem Solve', subprocess: 'DamageProcessorTool', level: 'NONE' },
+  { process: 'Problem Solve', subprocess: 'Inbound-Sideline App', level: 'NONE' },
+  { process: 'Problem Solve', subprocess: 'Psolve General', level: 'NONE' },
+  { process: 'Problem Solve', subprocess: 'Psolve Inbound', level: 'NONE' },
+  { process: 'Problem Solve', subprocess: 'Psolve Outbound', level: 'NONE' },
+  { process: 'Problem Solve', subprocess: 'Psolve Returns', level: 'NONE' },
+  { process: 'Problem Solve', subprocess: 'Inventory Power Tool', level: 'NONE' },
+  { process: 'Problem Solve', subprocess: 'Inventory-Add', level: 'BEGINNER' },
+  { process: 'Problem Solve', subprocess: 'Inventory-Delete', level: 'NONE' },
+  { process: 'Problem Solve', subprocess: 'Inventory-Edit', level: 'NONE' },
+  { process: 'Problem Solve', subprocess: 'Inventory-Move', level: 'EXPERT' },
+  { process: 'Problem Solve', subprocess: 'Label Printing', level: 'NONE' },
+  { process: 'Problem Solve', subprocess: 'OOPS', level: 'NONE' },
+  { process: 'Problem Solve', subprocess: 'Psolve ISS', level: 'NONE' },
+  { process: 'Problem Solve', subprocess: 'Sherlock', level: 'NONE' },
+  { process: 'RC Pick', subprocess: 'RC Pick Library', level: 'NONE' },
+  { process: 'RC Pick', subprocess: 'RC Pick Pallet Rack', level: 'NONE' },
+  { process: 'RC Pick', subprocess: 'RC Pick Support', level: 'NONE' },
+  { process: 'RC Sort', subprocess: 'RC Presort', level: 'NONE' },
+  { process: 'RC Sort', subprocess: 'RC Sort (Sub)', level: 'NONE' },
+  { process: 'RC Sort', subprocess: 'RC Sort Support', level: 'NONE' },
+  { process: 'RC Stow', subprocess: 'RC Case Stow', level: 'NONE' },
+  { process: 'RC Stow', subprocess: 'RC Pallet Stow', level: 'NONE' },
+  { process: 'RC Stow', subprocess: 'RC Stow Support', level: 'NONE' },
+  { process: 'Receive', subprocess: 'Receive Case', level: 'NONE' },
+  { process: 'Receive', subprocess: 'Receive Dock', level: 'NONE' },
+  { process: 'Receive', subprocess: 'Receive Each', level: 'NONE' },
+  { process: 'Receive', subprocess: 'Receive LP', level: 'NONE' },
+  { process: 'Receive', subprocess: 'Receive Pallet', level: 'NONE' },
+  { process: 'Receive', subprocess: 'Receive Support', level: 'NONE' },
+  { process: 'REPORTS', subprocess: 'MGR REPORTS', level: 'NONE' },
+  { process: 'Rsr', subprocess: 'Replen Case', level: 'NONE' },
+  { process: 'Rsr', subprocess: 'Replen Pallet', level: 'NONE' },
+  { process: 'Rsr', subprocess: 'Replen Support', level: 'NONE' },
+  { process: 'Rsr', subprocess: 'Stow-Reserve Case', level: 'NONE' },
+  { process: 'Rsr', subprocess: 'Stow-Reserve Pallet', level: 'NONE' },
+  { process: 'Rsr', subprocess: 'RSR Consolidation', level: 'NONE' },
+  { process: 'Ship', subprocess: 'DirectShip', level: 'NONE' },
+  { process: 'Ship', subprocess: 'EscalationTool', level: 'NONE' },
+  { process: 'Ship', subprocess: 'Outbound Dock', level: 'NONE' },
+  { process: 'Ship', subprocess: 'Ship Support', level: 'NONE' },
+  { process: 'Sort', subprocess: 'Rebin', level: 'BEGINNER' },
+  { process: 'Sort', subprocess: 'Sort Support', level: 'NONE' },
+  { process: 'Sort', subprocess: 'Tote Wrangler', level: 'NONE' },
+  { process: 'Sort', subprocess: 'Batchy', level: 'NONE' },
+  { process: 'Sort Center', subprocess: 'Container Mgmt', level: 'NONE' },
+  { process: 'Sort Center', subprocess: 'Exception Mgmt', level: 'NONE' },
+  { process: 'Sort Center', subprocess: 'SC Audit', level: 'NONE' },
+  { process: 'Sort Center', subprocess: 'Sort Center Support', level: 'NONE' },
+  { process: 'Sort Center', subprocess: 'Sorter Mgmt', level: 'NONE' },
+  { process: 'Sort Center', subprocess: 'Vehicle Mgmt', level: 'NONE' },
+  { process: 'Stow to Prime', subprocess: 'Stow to Prime (Sub)', level: 'NONE' },
+  { process: 'Stow to Prime', subprocess: 'Stow to Prime Spt', level: 'NONE' },
+  { process: 'Support', subprocess: 'Admin HR IT', level: 'NONE' },
+  { process: 'Support', subprocess: 'Training', level: 'NONE' },
+  { process: 'Support', subprocess: 'BatteryLabelApprover', level: 'NONE' },
+  { process: 'Support', subprocess: 'Vendor Flex', level: 'NONE' },
+  { process: 'Transfer In', subprocess: 'Transfer In Dock', level: 'NONE' },
+  { process: 'Transfer In', subprocess: 'Transfer In Stow', level: 'NONE' },
+  { process: 'Transfer In', subprocess: 'Transfer In Support', level: 'NONE' },
+  { process: 'Transfer Out', subprocess: 'Transfer Out (Sub)', level: 'NONE' },
+  { process: 'Transfer Out', subprocess: 'Transfer Out Dock', level: 'NONE' },
+  { process: 'Transfer Out', subprocess: 'Transfer Out Support', level: 'NONE' },
+  { process: 'Vendor Returns', subprocess: 'V-Returns Pack', level: 'INTERMEDIATE' },
+  { process: 'Vendor Returns', subprocess: 'V-Returns Pick', level: 'NONE' },
+  { process: 'Vendor Returns', subprocess: 'V-Returns Receive', level: 'NONE' },
+  { process: 'Vendor Returns', subprocess: 'V-Returns Ship', level: 'NONE' },
+  { process: 'Vendor Returns', subprocess: 'V-Returns Sort', level: 'NONE' },
+  { process: 'Vendor Returns', subprocess: 'V-Returns Stow', level: 'NONE' },
+  { process: 'Vendor Returns', subprocess: 'V-Returns Support', level: 'NONE' },
+  { process: 'Warehouse Deals', subprocess: 'Grading', level: 'NONE' },
+  { process: 'Warehouse Deals', subprocess: 'Kindle', level: 'NONE' },
+  { process: 'Warehouse Deals', subprocess: 'WD Sort', level: 'INTERMEDIATE' },
+  { process: 'Warehouse Deals', subprocess: 'Trade In', level: 'NONE' },
+];
+
+// Group process data by process name
+function getGroupedProcesses() {
+  const groups = {};
+  PROCESS_DATA.forEach(entry => {
+    if (!groups[entry.process]) groups[entry.process] = [];
+    groups[entry.process].push(entry);
+  });
+  return groups;
+}
+
+// Get subprocess names already on the board
+function getUsedSubprocesses(excludeBoxId) {
+  return State.boxes
+    .filter(b => b.id !== excludeBoxId)
+    .map(b => b.name.toLowerCase());
+}
+
+// Render the grouped, searchable picker list
+function renderPickerList(listEl, searchValue, onSelect, excludeBoxId) {
+  listEl.innerHTML = '';
+  const query = (searchValue || '').toLowerCase();
+  const used = getUsedSubprocesses(excludeBoxId);
+  const groups = getGroupedProcesses();
+  let hasResults = false;
+
+  Object.keys(groups).forEach(processName => {
+    const subs = groups[processName];
+    // Filter by search query (match process or subprocess)
+    const filtered = subs.filter(s =>
+      s.process.toLowerCase().includes(query) ||
+      s.subprocess.toLowerCase().includes(query)
+    );
+    if (filtered.length === 0) return;
+    hasResults = true;
+
+    // Group header
+    const header = document.createElement('div');
+    header.className = 'picker-group-header';
+    header.textContent = processName;
+    header.addEventListener('click', () => {
+      const items = header.nextElementSibling;
+      items.classList.toggle('collapsed');
+      header.classList.toggle('collapsed');
+    });
+    listEl.appendChild(header);
+
+    // Group items
+    const itemsContainer = document.createElement('div');
+    itemsContainer.className = 'picker-group-items';
+    filtered.forEach(entry => {
+      const item = document.createElement('div');
+      const isUsed = used.includes(entry.subprocess.toLowerCase());
+      item.className = 'picker-item' + (isUsed ? ' disabled' : '');
+      item.innerHTML = `<span class="picker-subprocess">${escapeHtml(entry.subprocess)}</span>`;
+      if (isUsed) {
+        item.innerHTML += `<span class="picker-used">In use</span>`;
+      }
+      if (!isUsed) {
+        item.addEventListener('click', () => onSelect(entry));
+      }
+      itemsContainer.appendChild(item);
+    });
+    listEl.appendChild(itemsContainer);
+  });
+
+  if (!hasResults) {
+    const empty = document.createElement('div');
+    empty.className = 'picker-empty';
+    empty.textContent = 'No matching processes found';
+    listEl.appendChild(empty);
+  }
+}
+
+// --- Box dialog (create) ---
 
 let pendingBoxPosition = null;
 
 function showBoxDialog(x, y) {
   pendingBoxPosition = { x, y };
   const dialog = document.getElementById('box-dialog');
-  const input = document.getElementById('box-name-input');
+  const search = document.getElementById('picker-search');
+  const list = document.getElementById('picker-list');
   const error = document.getElementById('box-name-error');
+  document.getElementById('picker-title').textContent = 'New Process Path';
   dialog.style.display = 'flex';
-  input.value = '';
+  search.value = '';
   error.textContent = '';
-  input.focus();
+  renderPickerList(list, '', (entry) => {
+    const box = {
+      id: uid(), name: entry.subprocess,
+      process: entry.process, level: entry.level,
+      x: pendingBoxPosition.x, y: pendingBoxPosition.y,
+      w: 280, h: 200,
+      color: BOX_COLORS[boxColorIndex++ % BOX_COLORS.length]
+    };
+    Connection.send({ type: 'box:add', box });
+    hideBoxDialog();
+  });
+  search.focus();
 }
 
 function hideBoxDialog() {
@@ -568,28 +792,23 @@ function hideBoxDialog() {
   pendingBoxPosition = null;
 }
 
-document.getElementById('box-create-btn').addEventListener('click', () => {
-  const input = document.getElementById('box-name-input');
-  const error = document.getElementById('box-name-error');
-  const name = input.value.trim();
-
-  if (!name) { error.textContent = 'Name is required'; return; }
-  if (State.isNameTaken(name)) { error.textContent = 'A box with this name already exists'; return; }
-
-  const box = {
-    id: uid(), name,
-    x: pendingBoxPosition.x, y: pendingBoxPosition.y,
-    w: 280, h: 200,
-    color: BOX_COLORS[boxColorIndex++ % BOX_COLORS.length]
-  };
-
-  Connection.send({ type: 'box:add', box });
-  hideBoxDialog();
+document.getElementById('picker-search').addEventListener('input', (e) => {
+  const list = document.getElementById('picker-list');
+  renderPickerList(list, e.target.value, (entry) => {
+    const box = {
+      id: uid(), name: entry.subprocess,
+      process: entry.process, level: entry.level,
+      x: pendingBoxPosition.x, y: pendingBoxPosition.y,
+      w: 280, h: 200,
+      color: BOX_COLORS[boxColorIndex++ % BOX_COLORS.length]
+    };
+    Connection.send({ type: 'box:add', box });
+    hideBoxDialog();
+  });
 });
 
 document.getElementById('box-cancel-btn').addEventListener('click', hideBoxDialog);
-document.getElementById('box-name-input').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') document.getElementById('box-create-btn').click();
+document.getElementById('picker-search').addEventListener('keydown', (e) => {
   if (e.key === 'Escape') hideBoxDialog();
 });
 document.getElementById('box-dialog').addEventListener('mousedown', (e) => {
@@ -605,13 +824,17 @@ function showRenameDialog(boxId) {
   if (!box) return;
   renameBoxId = boxId;
   const dialog = document.getElementById('rename-dialog');
-  const input = document.getElementById('rename-input');
+  const search = document.getElementById('rename-search');
+  const list = document.getElementById('rename-list');
   const error = document.getElementById('rename-error');
   dialog.style.display = 'flex';
-  input.value = box.name;
+  search.value = '';
   error.textContent = '';
-  input.focus();
-  input.select();
+  renderPickerList(list, '', (entry) => {
+    Connection.send({ type: 'box:rename', id: renameBoxId, name: entry.subprocess });
+    hideRenameDialog();
+  }, renameBoxId);
+  search.focus();
 }
 
 function hideRenameDialog() {
@@ -619,21 +842,16 @@ function hideRenameDialog() {
   renameBoxId = null;
 }
 
-document.getElementById('rename-save-btn').addEventListener('click', () => {
-  const input = document.getElementById('rename-input');
-  const error = document.getElementById('rename-error');
-  const name = input.value.trim();
-
-  if (!name) { error.textContent = 'Name is required'; return; }
-  if (State.isNameTaken(name, renameBoxId)) { error.textContent = 'A box with this name already exists'; return; }
-
-  Connection.send({ type: 'box:rename', id: renameBoxId, name });
-  hideRenameDialog();
+document.getElementById('rename-search').addEventListener('input', (e) => {
+  const list = document.getElementById('rename-list');
+  renderPickerList(list, e.target.value, (entry) => {
+    Connection.send({ type: 'box:rename', id: renameBoxId, name: entry.subprocess });
+    hideRenameDialog();
+  }, renameBoxId);
 });
 
 document.getElementById('rename-cancel-btn').addEventListener('click', hideRenameDialog);
-document.getElementById('rename-input').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') document.getElementById('rename-save-btn').click();
+document.getElementById('rename-search').addEventListener('keydown', (e) => {
   if (e.key === 'Escape') hideRenameDialog();
 });
 document.getElementById('rename-dialog').addEventListener('mousedown', (e) => {
@@ -731,7 +949,10 @@ function renderObjects() {
     el.style.minHeight = box.h + 'px';
     el.innerHTML = `
       <div class="box-header">
-        <span class="box-name">${escapeHtml(box.name)}</span>
+        <div class="box-name-wrap">
+          ${box.process ? `<span class="box-process">${escapeHtml(box.process)}</span>` : ''}
+          <span class="box-name">${escapeHtml(box.name)}</span>
+        </div>
         <div class="box-actions">
           <button class="box-rename-btn" title="Rename">&#9998;</button>
           <button class="box-delete-btn" title="Delete">&times;</button>
