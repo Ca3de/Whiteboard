@@ -11,6 +11,9 @@
     <button class="tool active" data-tool="select" title="Select / Move">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/></svg>
     </button>
+    <button class="tool" data-tool="box" title="Process Path (Box)">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/></svg>
+    </button>
     <button class="tool" data-tool="draw" title="Draw">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/></svg>
     </button>
@@ -35,8 +38,33 @@
 
   <div id="canvas-container">
     <canvas id="whiteboard"></canvas>
-    <!-- Sticky notes and text elements are rendered as overlays -->
     <div id="objects-layer"></div>
+  </div>
+
+  <!-- Box name prompt dialog -->
+  <div id="box-dialog" class="dialog-overlay" style="display:none">
+    <div class="dialog">
+      <h3>New Process Path</h3>
+      <input type="text" id="box-name-input" placeholder="Enter path name..." maxlength="40" autocomplete="off">
+      <div class="dialog-error" id="box-name-error"></div>
+      <div class="dialog-actions">
+        <button id="box-cancel-btn" class="btn-secondary">Cancel</button>
+        <button id="box-create-btn" class="btn-primary">Create</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Box rename dialog -->
+  <div id="rename-dialog" class="dialog-overlay" style="display:none">
+    <div class="dialog">
+      <h3>Rename Process Path</h3>
+      <input type="text" id="rename-input" placeholder="New name..." maxlength="40" autocomplete="off">
+      <div class="dialog-error" id="rename-error"></div>
+      <div class="dialog-actions">
+        <button id="rename-cancel-btn" class="btn-secondary">Cancel</button>
+        <button id="rename-save-btn" class="btn-primary">Save</button>
+      </div>
+    </div>
   </div>
 
   <script src="app.js"></script>
