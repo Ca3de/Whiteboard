@@ -24,6 +24,7 @@ async function start() {
 
   const app = express();
   const server = http.createServer(app);
+  app.use(express.json());
   app.use(express.static(path.join(__dirname, 'public')));
 
   app.get('/api/ping', (_req, res) => {
@@ -32,6 +33,47 @@ async function start() {
 
   app.get('/api/state', (_req, res) => {
     res.json(board.state);
+  });
+
+  // --- Employee endpoints ---
+
+  app.get('/api/employees', (_req, res) => {
+    res.json(board.getEmployees());
+  });
+
+  app.post('/api/employees', (req, res) => {
+    const result = board.addOrUpdateEmployee(req.body);
+    if (!result) {
+      return res.status(400).json({ error: 'Invalid employee data' });
+    }
+    // Broadcast updated employee list and tags to all WS clients
+    broadcastAll({
+      type: 'employees:updated',
+      employees: board.getEmployees(),
+      availableTags: board.state.availableTags
+    });
+    res.json({ ok: true, employee: result });
+  });
+
+  app.delete('/api/employees/:id', (req, res) => {
+    const removed = board.removeEmployee(req.params.id);
+    if (!removed) {
+      return res.status(404).json({ error: 'Employee not found' });
+    }
+    // Broadcast updated state
+    broadcastAll({
+      type: 'employees:updated',
+      employees: board.getEmployees(),
+      availableTags: board.state.availableTags,
+      placedTags: board.state.placedTags
+    });
+    res.json({ ok: true });
+  });
+
+  // Permission check endpoint (used by frontend)
+  app.get('/api/employees/:id/check/:subprocess', (req, res) => {
+    const check = board.checkPermission(req.params.id, decodeURIComponent(req.params.subprocess));
+    res.json(check);
   });
 
   // --- WebSocket ---
@@ -109,9 +151,17 @@ async function start() {
       switch (msg.type) {
         // --- Tags (badges) ---
         case 'tag:place': {
-          const tag = board.placeTag(msg.tagId, msg.boxId);
-          if (tag) {
-            broadcastAll({ type: 'tag:placed', tag });
+          const result = board.placeTag(msg.tagId, msg.boxId);
+          if (result && result.denied) {
+            ws.send(JSON.stringify({
+              type: 'tag:denied',
+              id: msg.tagId,
+              boxId: msg.boxId,
+              reason: result.reason,
+              level: result.level
+            }));
+          } else if (result) {
+            broadcastAll({ type: 'tag:placed', tag: result });
           }
           break;
         }
@@ -132,9 +182,17 @@ async function start() {
           break;
         }
         case 'tag:unlock': {
-          const tag = board.unlockTag(msg.tagId, ws.sessionId, msg.boxId);
-          if (tag) {
-            broadcastAll({ type: 'tag:unlocked', id: msg.tagId, boxId: tag.boxId });
+          const result = board.unlockTag(msg.tagId, ws.sessionId, msg.boxId);
+          if (result && result.denied) {
+            ws.send(JSON.stringify({
+              type: 'tag:move-denied',
+              id: msg.tagId,
+              boxId: result.boxId,
+              reason: result.reason
+            }));
+            broadcastAll({ type: 'tag:unlocked', id: msg.tagId, boxId: result.boxId });
+          } else if (result) {
+            broadcastAll({ type: 'tag:unlocked', id: msg.tagId, boxId: result.boxId });
           }
           break;
         }

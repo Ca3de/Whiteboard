@@ -230,6 +230,27 @@ body {
   color: #a0aec0;
 }
 
+.palette-tag .badge-label-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-width: 0;
+}
+
+.palette-tag .badge-login {
+  font-size: 0.62rem;
+  font-weight: 400;
+  color: #718096;
+  letter-spacing: 0.02em;
+}
+
+/* Drop-target denied state */
+.process-box.drop-denied {
+  background: rgba(248, 113, 113, 0.15);
+  border-color: #f87171;
+  box-shadow: 0 0 12px rgba(248, 113, 113, 0.3);
+}
+
 /* ========== Badges inside boxes ========== */
 .board-tag {
   padding: 5px 12px 5px 8px;

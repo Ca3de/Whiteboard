@@ -2,8 +2,11 @@
  * Board — core domain model for whiteboard
  *
  * Manages boxes (process paths), tags (lockable, single-instance),
- * strokes, sticky notes, and text labels.
+ * strokes, sticky notes, text labels, and employees with permissions.
  */
+
+const LEVEL_RANK = { 'none': 0, 'beginner': 1, 'intermediate': 2, 'expert': 3, 'admin': 4, 'permitted': 1 };
+
 class Board {
   constructor({ onEvent }) {
     this._boxes = [];
@@ -12,23 +15,13 @@ class Board {
     this._texts = [];
     this._onEvent = onEvent || (() => {});
 
-    // Tags (badges): predefined list of associate/person badges.
+    // Employees synced from FCLM extension
+    // { id, login, name, badge, emplId, shift, permissions: { subprocess: level }, lastSynced }
+    this._employees = [];
+
+    // Tags (badges) derived from employees.
     // Each can be placed on the board or remain in the palette.
-    // Placed tags have x, y coordinates. Locked tags have a lockedBy session id.
-    this._availableTags = [
-      { id: 'badge-alice', label: 'Alice Johnson' },
-      { id: 'badge-bob', label: 'Bob Martinez' },
-      { id: 'badge-carol', label: 'Carol Chen' },
-      { id: 'badge-dave', label: 'Dave Wilson' },
-      { id: 'badge-eve', label: 'Eve Nakamura' },
-      { id: 'badge-frank', label: 'Frank Osei' },
-      { id: 'badge-grace', label: 'Grace Kim' },
-      { id: 'badge-hank', label: 'Hank Patel' },
-      { id: 'badge-iris', label: 'Iris Johansson' },
-      { id: 'badge-jack', label: 'Jack Rivera' },
-      { id: 'badge-kate', label: 'Kate Murphy' },
-      { id: 'badge-leo', label: 'Leo Andersen' }
-    ];
+    this._availableTags = [];
 
     // Placed tags: { id, label, boxId, lockedBy: null | sessionId }
     this._placedTags = [];
@@ -41,7 +34,109 @@ class Board {
       notes: [...this._notes],
       texts: [...this._texts],
       availableTags: this._availableTags.map(t => ({ ...t })),
-      placedTags: this._placedTags.map(t => ({ ...t }))
+      placedTags: this._placedTags.map(t => ({ ...t })),
+      employees: this._employees.map(e => ({ ...e, permissions: { ...e.permissions } }))
+    };
+  }
+
+  // --- Employees ---
+
+  addOrUpdateEmployee(data) {
+    const { employee, permissions, source, timestamp } = data;
+    const id = employee.login || employee.emplId;
+    if (!id) return null;
+
+    const existing = this._employees.find(e => e.id === id);
+    if (existing) {
+      existing.name = employee.name || existing.name;
+      existing.badge = employee.badge || existing.badge;
+      existing.emplId = employee.emplId || existing.emplId;
+      existing.login = employee.login || existing.login;
+      existing.shift = employee.shift || existing.shift;
+      existing.permissions = permissions || existing.permissions;
+      existing.source = source;
+      existing.lastSynced = timestamp || Date.now();
+    } else {
+      this._employees.push({
+        id,
+        login: employee.login,
+        name: employee.name || id,
+        badge: employee.badge,
+        emplId: employee.emplId,
+        shift: employee.shift,
+        permissions: permissions || {},
+        source,
+        lastSynced: timestamp || Date.now()
+      });
+    }
+
+    // Rebuild available tags from employees
+    this._rebuildTags();
+    this._onEvent('employee:synced', { id });
+    return this._employees.find(e => e.id === id);
+  }
+
+  removeEmployee(id) {
+    const before = this._employees.length;
+    this._employees = this._employees.filter(e => e.id !== id);
+    if (this._employees.length < before) {
+      // Remove placed tag for this employee
+      const tagId = `emp-${id}`;
+      this._placedTags = this._placedTags.filter(t => t.id !== tagId);
+      this._rebuildTags();
+      this._onEvent('employee:removed', { id });
+      return true;
+    }
+    return false;
+  }
+
+  getEmployees() {
+    return this._employees.map(e => ({ ...e, permissions: { ...e.permissions } }));
+  }
+
+  _rebuildTags() {
+    this._availableTags = this._employees.map(e => ({
+      id: `emp-${e.id}`,
+      label: e.name || e.login || e.id,
+      employeeId: e.id
+    }));
+  }
+
+  /**
+   * Check if an employee has permission (Beginner+) for a subprocess.
+   * Returns { allowed, level, required } or null if no employee found.
+   */
+  checkPermission(employeeId, subprocessName) {
+    const emp = this._employees.find(e => e.id === employeeId);
+    if (!emp) return { allowed: true, level: 'unknown', reason: 'no employee data' };
+
+    // Find the permission for this subprocess (case-insensitive match)
+    const subLower = subprocessName.toLowerCase();
+    let level = null;
+    for (const [key, val] of Object.entries(emp.permissions)) {
+      if (key.toLowerCase() === subLower) {
+        level = val;
+        break;
+      }
+    }
+
+    // If no permission entry exists, check if this is a subprocess we track
+    if (level === null) {
+      // If employee has permissions data but this subprocess isn't listed,
+      // it means they have "None" for it
+      if (Object.keys(emp.permissions).length > 0) {
+        return { allowed: false, level: 'None', reason: `No permission for ${subprocessName}` };
+      }
+      // No permissions data at all — allow by default
+      return { allowed: true, level: 'unknown', reason: 'no permission data loaded' };
+    }
+
+    const rank = LEVEL_RANK[level.toLowerCase()] || 0;
+    const allowed = rank >= 1; // Beginner or higher
+    return {
+      allowed,
+      level,
+      reason: allowed ? null : `${emp.name || emp.id} has ${level} for ${subprocessName}`
     };
   }
 
@@ -53,9 +148,19 @@ class Board {
 
   placeTag(tagId, boxId) {
     if (this.isTagPlaced(tagId)) return null;
-    if (!this._boxes.find(b => b.id === boxId)) return null;
+    const box = this._boxes.find(b => b.id === boxId);
+    if (!box) return null;
     const def = this._availableTags.find(t => t.id === tagId);
     if (!def) return null;
+
+    // Permission check
+    if (def.employeeId) {
+      const check = this.checkPermission(def.employeeId, box.name);
+      if (!check.allowed) {
+        return { denied: true, reason: check.reason, level: check.level };
+      }
+    }
+
     const placed = { id: tagId, label: def.label, boxId, lockedBy: null };
     this._placedTags.push(placed);
     this._onEvent('tag:placed', { tag: placed });
@@ -84,6 +189,26 @@ class Board {
     const tag = this._placedTags.find(t => t.id === tagId);
     if (!tag) return null;
     if (tag.lockedBy !== sessionId) return null;
+
+    // Permission check on new box
+    if (boxId && boxId !== tag.boxId) {
+      const box = this._boxes.find(b => b.id === boxId);
+      if (box) {
+        const def = this._availableTags.find(t => t.id === tagId);
+        if (def && def.employeeId) {
+          const check = this.checkPermission(def.employeeId, box.name);
+          if (!check.allowed) {
+            // Revert to original box
+            tag.lockedBy = null;
+            this._onEvent('tag:move-denied', {
+              id: tagId, boxId: tag.boxId, reason: check.reason
+            });
+            return { ...tag, denied: true, reason: check.reason };
+          }
+        }
+      }
+    }
+
     // Move to new box if provided and valid
     if (boxId && this._boxes.find(b => b.id === boxId)) {
       tag.boxId = boxId;
