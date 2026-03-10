@@ -14,7 +14,7 @@
   "content_scripts": [
     {
       "matches": [
-        "https://fclm-portal.amazon.com/employee/permissions*"
+        "https://fclm-portal.amazon.com/*"
       ],
       "js": ["content/fclm-permissions.js"],
       "run_at": "document_idle"
