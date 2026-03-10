@@ -34,6 +34,11 @@
     </select>
     <div class="separator"></div>
     <button id="clear-btn" title="Clear board">Clear</button>
+    <div class="separator"></div>
+    <button id="zoom-out-btn" class="tool" title="Zoom Out">&minus;</button>
+    <span id="zoom-level">100%</span>
+    <button id="zoom-in-btn" class="tool" title="Zoom In">+</button>
+    <button id="zoom-reset-btn" class="tool" title="Reset Zoom" style="font-size:0.7rem">Fit</button>
     <div class="spacer"></div>
     <div id="connection-status" class="status connected">Connected</div>
   </div>
@@ -51,8 +56,10 @@
     </div>
 
     <div id="canvas-container">
-      <canvas id="whiteboard"></canvas>
-      <div id="objects-layer"></div>
+      <div id="viewport">
+        <canvas id="whiteboard"></canvas>
+        <div id="objects-layer"></div>
+      </div>
     </div>
   </div>
 

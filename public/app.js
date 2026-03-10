@@ -158,8 +158,10 @@ const ctx = canvas.getContext('2d');
 
 function resizeCanvas() {
   const container = document.getElementById('canvas-container');
-  canvas.width = container.clientWidth;
-  canvas.height = container.clientHeight;
+  // Make canvas large enough to cover the pannable area
+  canvas.width = container.clientWidth / zoom + Math.abs(panX) / zoom + 2000;
+  canvas.height = container.clientHeight / zoom + Math.abs(panY) / zoom + 2000;
+  applyViewportTransform();
   redraw();
 }
 
@@ -208,6 +210,31 @@ let resizeStart = { x: 0, y: 0, w: 0, h: 0 };
 // Tag dragging from palette
 let paletteDragTag = null; // { id, label, el (ghost) }
 let paletteDragPos = { x: 0, y: 0 };
+
+// --- Zoom & Pan ---
+let zoom = 1;
+let panX = 0;
+let panY = 0;
+let isPanning = false;
+let panStart = { x: 0, y: 0 };
+const MIN_ZOOM = 0.15;
+const MAX_ZOOM = 3;
+
+function applyViewportTransform() {
+  const vp = document.getElementById('viewport');
+  vp.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
+  document.getElementById('zoom-level').textContent = Math.round(zoom * 100) + '%';
+}
+
+// Convert screen (client) coordinates to board coordinates
+function screenToBoard(clientX, clientY) {
+  const container = document.getElementById('canvas-container');
+  const rect = container.getBoundingClientRect();
+  return {
+    x: (clientX - rect.left - panX) / zoom,
+    y: (clientY - rect.top - panY) / zoom
+  };
+}
 
 function getInitials(name) {
   return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
@@ -355,26 +382,37 @@ document.addEventListener('mousemove', (e) => {
     return;
   }
 
+  // Pan
+  if (isPanning) {
+    panX += e.clientX - panStart.x;
+    panY += e.clientY - panStart.y;
+    panStart.x = e.clientX;
+    panStart.y = e.clientY;
+    applyViewportTransform();
+    return;
+  }
+
   // Drag existing objects (boxes, notes, text)
   if (dragTarget) {
-    const x = e.clientX - dragOffset.x;
-    const y = e.clientY - dragOffset.y;
-    dragTarget.el.style.left = x + 'px';
-    dragTarget.el.style.top = y + 'px';
+    const { x, y } = screenToBoard(e.clientX, e.clientY);
+    const bx = x - dragOffset.x;
+    const by = y - dragOffset.y;
+    dragTarget.el.style.left = bx + 'px';
+    dragTarget.el.style.top = by + 'px';
 
-    if (dragTarget.type === 'box') State.updateBox(dragTarget.id, { x, y });
-    else if (dragTarget.type === 'note') State.updateNote(dragTarget.id, { x, y });
-    else if (dragTarget.type === 'text') State.updateText(dragTarget.id, { x, y });
+    if (dragTarget.type === 'box') State.updateBox(dragTarget.id, { x: bx, y: by });
+    else if (dragTarget.type === 'note') State.updateNote(dragTarget.id, { x: bx, y: by });
+    else if (dragTarget.type === 'text') State.updateText(dragTarget.id, { x: bx, y: by });
   }
 
   // Resize
   if (resizeTarget) {
-    const dx = e.clientX - resizeStart.x;
-    const dy = e.clientY - resizeStart.y;
+    const dx = (e.clientX - resizeStart.x) / zoom;
+    const dy = (e.clientY - resizeStart.y) / zoom;
     const w = Math.max(200, resizeStart.w + dx);
     const h = Math.max(150, resizeStart.h + dy);
     resizeTarget.el.style.width = w + 'px';
-    resizeTarget.el.style.height = h + 'px';
+    resizeTarget.el.style.minHeight = h + 'px';
     State.updateBox(resizeTarget.id, { w, h });
   }
 });
@@ -422,11 +460,92 @@ document.addEventListener('mouseup', (e) => {
     renderObjects();
   }
 
+  if (isPanning) {
+    isPanning = false;
+    document.getElementById('canvas-container').style.cursor =
+      currentTool === 'select' ? 'default' :
+      currentTool === 'box' ? 'copy' :
+      currentTool === 'draw' ? 'crosshair' :
+      currentTool === 'note' ? 'copy' :
+      currentTool === 'text' ? 'text' : 'default';
+    return;
+  }
+
   if (resizeTarget) {
     const b = State.boxes.find(b => b.id === resizeTarget.id);
     if (b) Connection.send({ type: 'box:resize', id: b.id, w: b.w, h: b.h });
     resizeTarget = null;
   }
+});
+
+// --- Zoom with scroll wheel ---
+
+document.getElementById('canvas-container').addEventListener('wheel', (e) => {
+  e.preventDefault();
+  const container = document.getElementById('canvas-container');
+  const rect = container.getBoundingClientRect();
+  const mouseX = e.clientX - rect.left;
+  const mouseY = e.clientY - rect.top;
+
+  // Zoom towards cursor
+  const oldZoom = zoom;
+  const delta = -e.deltaY * 0.001;
+  zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom * (1 + delta)));
+
+  // Adjust pan so the point under the cursor stays fixed
+  panX = mouseX - (mouseX - panX) * (zoom / oldZoom);
+  panY = mouseY - (mouseY - panY) * (zoom / oldZoom);
+
+  applyViewportTransform();
+  resizeCanvas();
+}, { passive: false });
+
+// --- Middle-mouse / Space+drag pan ---
+
+document.getElementById('canvas-container').addEventListener('mousedown', (e) => {
+  if (e.button === 1 || (e.button === 0 && e.altKey)) {
+    e.preventDefault();
+    isPanning = true;
+    panStart.x = e.clientX;
+    panStart.y = e.clientY;
+    document.getElementById('canvas-container').style.cursor = 'grabbing';
+  }
+});
+
+// --- Zoom buttons ---
+
+document.getElementById('zoom-in-btn').addEventListener('click', () => {
+  const container = document.getElementById('canvas-container');
+  const rect = container.getBoundingClientRect();
+  const cx = rect.width / 2;
+  const cy = rect.height / 2;
+  const oldZoom = zoom;
+  zoom = Math.min(MAX_ZOOM, zoom * 1.25);
+  panX = cx - (cx - panX) * (zoom / oldZoom);
+  panY = cy - (cy - panY) * (zoom / oldZoom);
+  applyViewportTransform();
+  resizeCanvas();
+});
+
+document.getElementById('zoom-out-btn').addEventListener('click', () => {
+  const container = document.getElementById('canvas-container');
+  const rect = container.getBoundingClientRect();
+  const cx = rect.width / 2;
+  const cy = rect.height / 2;
+  const oldZoom = zoom;
+  zoom = Math.max(MIN_ZOOM, zoom / 1.25);
+  panX = cx - (cx - panX) * (zoom / oldZoom);
+  panY = cy - (cy - panY) * (zoom / oldZoom);
+  applyViewportTransform();
+  resizeCanvas();
+});
+
+document.getElementById('zoom-reset-btn').addEventListener('click', () => {
+  zoom = 1;
+  panX = 0;
+  panY = 0;
+  applyViewportTransform();
+  resizeCanvas();
 });
 
 // --- Box dialog ---
@@ -524,9 +643,7 @@ document.getElementById('rename-dialog').addEventListener('mousedown', (e) => {
 // --- Canvas events ---
 
 canvas.addEventListener('mousedown', (e) => {
-  const rect = canvas.getBoundingClientRect();
-  const x = e.clientX - rect.left;
-  const y = e.clientY - rect.top;
+  const { x, y } = screenToBoard(e.clientX, e.clientY);
 
   if (currentTool === 'draw') {
     isDrawing = true;
@@ -545,8 +662,8 @@ canvas.addEventListener('mousedown', (e) => {
 
 canvas.addEventListener('mousemove', (e) => {
   if (!isDrawing || currentTool !== 'draw') return;
-  const rect = canvas.getBoundingClientRect();
-  currentStroke.points.push({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+  const pt = screenToBoard(e.clientX, e.clientY);
+  currentStroke.points.push(pt);
   redraw();
 
   ctx.beginPath();
@@ -670,8 +787,9 @@ function renderObjects() {
     el.querySelector('.box-header').addEventListener('mousedown', (e) => {
       if (e.target.closest('.box-actions')) return;
       dragTarget = { type: 'box', id: box.id, el };
-      dragOffset.x = e.clientX - box.x;
-      dragOffset.y = e.clientY - box.y;
+      const bp = screenToBoard(e.clientX, e.clientY);
+      dragOffset.x = bp.x - box.x;
+      dragOffset.y = bp.y - box.y;
       el.classList.add('dragging');
       e.preventDefault();
     });
@@ -713,8 +831,9 @@ function renderObjects() {
     el.addEventListener('mousedown', (e) => {
       if (e.target.classList.contains('note-content') || e.target.classList.contains('note-delete')) return;
       dragTarget = { type: 'note', id: note.id, el };
-      dragOffset.x = e.clientX - note.x;
-      dragOffset.y = e.clientY - note.y;
+      const bp = screenToBoard(e.clientX, e.clientY);
+      dragOffset.x = bp.x - note.x;
+      dragOffset.y = bp.y - note.y;
       el.classList.add('dragging');
       e.preventDefault();
     });
@@ -749,8 +868,9 @@ function renderObjects() {
       if (e.target.classList.contains('text-delete')) return;
       if (document.activeElement === el) return;
       dragTarget = { type: 'text', id: t.id, el };
-      dragOffset.x = e.clientX - t.x;
-      dragOffset.y = e.clientY - t.y;
+      const bp = screenToBoard(e.clientX, e.clientY);
+      dragOffset.x = bp.x - t.x;
+      dragOffset.y = bp.y - t.y;
       el.classList.add('dragging');
     });
 
@@ -881,4 +1001,5 @@ EventBus.on('connection:change', (connected) => {
 
 window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
+applyViewportTransform();
 Connection.connect();
