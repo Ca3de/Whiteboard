@@ -5,28 +5,21 @@ const path = require('path');
 
 const PluginManager = require('./src/core/PluginManager');
 const Board = require('./src/core/Board');
-const CacheManager = require('./src/cache/CacheManager');
-const LocalProvider = require('./src/providers/LocalProvider');
 const LoggerPlugin = require('./src/plugins/LoggerPlugin');
 
 // --- Bootstrap ---
 
 const plugins = new PluginManager();
-const provider = new CacheManager(new LocalProvider());
+
+const board = new Board({
+  onEvent: (eventName, data) => {
+    plugins.trigger(eventName, data);
+  }
+});
 
 async function start() {
-  const paths = await provider.fetchPaths();
-
-  const board = new Board({
-    paths,
-    onEvent: (eventName, data) => {
-      plugins.trigger(eventName, data);
-    }
-  });
-
-  // Register plugins (add more here — no core changes needed)
   plugins.register(LoggerPlugin);
-  await plugins.initAll({ board, provider });
+  await plugins.initAll({ board });
 
   // --- HTTP ---
 
@@ -34,12 +27,6 @@ async function start() {
   const server = http.createServer(app);
   app.use(express.static(path.join(__dirname, 'public')));
 
-  // REST endpoint for provider info (useful for future extension handshake)
-  app.get('/api/provider', (_req, res) => {
-    res.json({ provider: provider.providerName });
-  });
-
-  // Health check endpoint
   app.get('/api/ping', (_req, res) => {
     res.json({ status: 'ok', timestamp: Date.now() });
   });
@@ -65,22 +52,60 @@ async function start() {
       try { msg = JSON.parse(raw); } catch { return; }
 
       switch (msg.type) {
-        case 'tag:create': {
-          const tag = board.createTag({
-            id: msg.id, text: msg.text, pathId: msg.pathId, color: msg.color
-          });
-          if (tag) broadcast({ type: 'tag:created', tag }, ws);
+        case 'stroke:add': {
+          board.addStroke(msg.stroke);
+          broadcast({ type: 'stroke:added', stroke: msg.stroke }, ws);
           break;
         }
-        case 'tag:move': {
-          const tag = board.moveTag(msg.id, msg.pathId);
-          if (tag) broadcast({ type: 'tag:moved', id: msg.id, pathId: msg.pathId }, ws);
+        case 'note:add': {
+          board.addNote(msg.note);
+          broadcast({ type: 'note:added', note: msg.note }, ws);
           break;
         }
-        case 'tag:delete': {
-          if (board.deleteTag(msg.id)) {
-            broadcast({ type: 'tag:deleted', id: msg.id }, ws);
+        case 'note:update': {
+          if (board.updateNote(msg.id, { text: msg.text })) {
+            broadcast({ type: 'note:updated', id: msg.id, text: msg.text }, ws);
           }
+          break;
+        }
+        case 'note:move': {
+          if (board.moveNote(msg.id, msg.x, msg.y)) {
+            broadcast({ type: 'note:moved', id: msg.id, x: msg.x, y: msg.y }, ws);
+          }
+          break;
+        }
+        case 'note:delete': {
+          if (board.deleteNote(msg.id)) {
+            broadcast({ type: 'note:deleted', id: msg.id }, ws);
+          }
+          break;
+        }
+        case 'text:add': {
+          board.addText(msg.textObj);
+          broadcast({ type: 'text:added', textObj: msg.textObj }, ws);
+          break;
+        }
+        case 'text:update': {
+          if (board.updateText(msg.id, { text: msg.text })) {
+            broadcast({ type: 'text:updated', id: msg.id, text: msg.text }, ws);
+          }
+          break;
+        }
+        case 'text:move': {
+          if (board.moveText(msg.id, msg.x, msg.y)) {
+            broadcast({ type: 'text:moved', id: msg.id, x: msg.x, y: msg.y }, ws);
+          }
+          break;
+        }
+        case 'text:delete': {
+          if (board.deleteText(msg.id)) {
+            broadcast({ type: 'text:deleted', id: msg.id }, ws);
+          }
+          break;
+        }
+        case 'clear': {
+          board.clear();
+          broadcast({ type: 'cleared' }, ws);
           break;
         }
       }
@@ -92,7 +117,6 @@ async function start() {
   const PORT = process.env.PORT || 3000;
   server.listen(PORT, () => {
     console.log(`Whiteboard running at http://localhost:${PORT}`);
-    console.log(`Provider: ${provider.providerName}`);
   });
 }
 

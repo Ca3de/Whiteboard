@@ -3,7 +3,6 @@
  *
  * Demonstrates how to hook into board events without
  * modifying core code (Open/Closed principle).
- * Add new plugins the same way — no core changes needed.
  */
 module.exports = {
   name: 'logger',
@@ -13,14 +12,17 @@ module.exports = {
   },
 
   hooks: {
-    'tag:created': ({ tag }) => {
-      console.log(`[Logger] Tag created: "${tag.text}" in ${tag.pathId}`);
+    'stroke:added': () => {
+      console.log('[Logger] Stroke added');
     },
-    'tag:moved': ({ id, pathId }) => {
-      console.log(`[Logger] Tag ${id} moved to ${pathId}`);
+    'note:added': ({ note }) => {
+      console.log(`[Logger] Note created at (${note.x}, ${note.y})`);
     },
-    'tag:deleted': ({ id }) => {
-      console.log(`[Logger] Tag ${id} deleted`);
+    'note:deleted': ({ id }) => {
+      console.log(`[Logger] Note ${id} deleted`);
+    },
+    'cleared': () => {
+      console.log('[Logger] Board cleared');
     }
   }
 };

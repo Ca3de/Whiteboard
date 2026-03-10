@@ -8,63 +8,94 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   background: #1a1a2e;
   color: #e0e0e0;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
-header {
+/* Toolbar */
+#toolbar {
   display: flex;
   align-items: center;
-  gap: 20px;
-  padding: 16px 24px;
+  gap: 8px;
+  padding: 8px 16px;
   background: #16213e;
   border-bottom: 2px solid #0f3460;
+  z-index: 100;
 }
 
-header h1 {
-  font-size: 1.4rem;
-  color: #e94560;
-  white-space: nowrap;
-}
-
-.controls {
+.tool {
+  width: 36px;
+  height: 36px;
   display: flex;
-  gap: 8px;
-  flex: 1;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: #a0aec0;
+  cursor: pointer;
+  transition: all 0.15s;
 }
 
-#tag-input {
-  padding: 8px 12px;
-  border: 1px solid #0f3460;
-  border-radius: 6px;
+.tool:hover {
   background: #1a1a2e;
   color: #e0e0e0;
-  font-size: 0.9rem;
-  width: 220px;
 }
 
-#tag-input:focus {
-  outline: none;
+.tool.active {
+  background: #0f3460;
+  color: #e94560;
   border-color: #e94560;
 }
 
-#add-tag-btn {
-  padding: 8px 16px;
-  background: #e94560;
-  color: white;
+.separator {
+  width: 1px;
+  height: 24px;
+  background: #0f3460;
+  margin: 0 4px;
+}
+
+.spacer {
+  flex: 1;
+}
+
+#color-picker {
+  width: 32px;
+  height: 32px;
   border: none;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 0.9rem;
-  font-weight: 600;
-  white-space: nowrap;
+  background: transparent;
 }
 
-#add-tag-btn:hover {
-  background: #c73652;
+#stroke-width {
+  padding: 4px 8px;
+  background: #1a1a2e;
+  color: #e0e0e0;
+  border: 1px solid #0f3460;
+  border-radius: 6px;
+  font-size: 0.8rem;
+}
+
+#clear-btn {
+  padding: 6px 14px;
+  background: transparent;
+  color: #a0aec0;
+  border: 1px solid #0f3460;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+
+#clear-btn:hover {
+  background: #3d0a0a;
+  color: #f87171;
+  border-color: #f87171;
 }
 
 .status {
-  margin-left: auto;
   padding: 4px 12px;
   border-radius: 12px;
   font-size: 0.75rem;
@@ -82,119 +113,130 @@ header h1 {
   color: #f87171;
 }
 
-/* Board layout */
-#board {
-  display: flex;
-  gap: 16px;
-  padding: 24px;
-  min-height: calc(100vh - 68px);
-  overflow-x: auto;
-}
-
-.path-column {
+/* Canvas area */
+#canvas-container {
   flex: 1;
-  min-width: 220px;
-  background: #16213e;
-  border-radius: 10px;
-  display: flex;
-  flex-direction: column;
-  border: 2px solid transparent;
-  transition: border-color 0.2s, background 0.2s;
-}
-
-.path-column.drag-over {
-  border-color: #e94560;
-  background: #1a2744;
-}
-
-.path-header {
-  padding: 14px 16px;
-  font-weight: 700;
-  font-size: 0.95rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: #a0aec0;
-  border-bottom: 1px solid #0f3460;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.tag-count {
-  background: #0f3460;
-  color: #e0e0e0;
-  padding: 2px 8px;
-  border-radius: 10px;
-  font-size: 0.75rem;
-}
-
-.path-body {
-  flex: 1;
-  padding: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-height: 100px;
-}
-
-/* Tags */
-.tag {
-  padding: 10px 14px;
-  border-radius: 8px;
-  font-size: 0.9rem;
-  font-weight: 500;
-  cursor: grab;
   position: relative;
+  overflow: hidden;
+  cursor: crosshair;
+}
+
+#whiteboard {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+#objects-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+/* Sticky notes */
+.sticky-note {
+  position: absolute;
+  width: 200px;
+  min-height: 120px;
+  border-radius: 4px;
+  padding: 12px;
+  font-size: 0.9rem;
+  cursor: grab;
+  pointer-events: auto;
+  box-shadow: 2px 4px 12px rgba(0, 0, 0, 0.4);
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  transition: transform 0.15s, box-shadow 0.15s;
-  user-select: none;
+  flex-direction: column;
 }
 
-.tag:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-}
-
-.tag.dragging {
-  opacity: 0.5;
+.sticky-note.dragging {
+  opacity: 0.7;
   cursor: grabbing;
+  z-index: 1000;
 }
 
-.tag .delete-btn {
+.sticky-note .note-content {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  resize: none;
+  outline: none;
+  width: 100%;
+}
+
+.sticky-note .note-delete {
+  position: absolute;
+  top: 4px;
+  right: 8px;
   background: none;
   border: none;
   color: inherit;
   opacity: 0;
   cursor: pointer;
   font-size: 1.1rem;
-  padding: 0 0 0 8px;
-  transition: opacity 0.2s;
+  pointer-events: auto;
+  transition: opacity 0.15s;
 }
 
-.tag:hover .delete-btn {
+.sticky-note:hover .note-delete {
   opacity: 0.6;
 }
 
-.tag .delete-btn:hover {
+.sticky-note .note-delete:hover {
   opacity: 1;
 }
 
-/* Tag colors */
-.tag-blue    { background: #1e3a5f; color: #7dd3fc; }
-.tag-green   { background: #1a3a2a; color: #86efac; }
-.tag-orange  { background: #3d2a0a; color: #fdba74; }
-.tag-pink    { background: #3d0a2a; color: #f9a8d4; }
-.tag-purple  { background: #2a1a3d; color: #c4b5fd; }
-.tag-teal    { background: #0a3d3d; color: #5eead4; }
+/* Note colors */
+.note-yellow  { background: #fef3c7; color: #92400e; }
+.note-pink    { background: #fce7f3; color: #9d174d; }
+.note-blue    { background: #dbeafe; color: #1e40af; }
+.note-green   { background: #d1fae5; color: #065f46; }
+.note-purple  { background: #ede9fe; color: #5b21b6; }
 
-/* Responsive */
-@media (max-width: 768px) {
-  #board {
-    flex-direction: column;
-  }
-  .path-column {
-    min-width: unset;
-  }
+/* Text labels */
+.text-label {
+  position: absolute;
+  pointer-events: auto;
+  cursor: grab;
+  font-size: 1rem;
+  padding: 4px 8px;
+  border-radius: 4px;
+  outline: none;
+  min-width: 20px;
+}
+
+.text-label.dragging {
+  opacity: 0.7;
+  cursor: grabbing;
+}
+
+.text-label:focus {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.text-label .text-delete {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  background: #3d0a0a;
+  border: none;
+  color: #f87171;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  font-size: 0.7rem;
+  cursor: pointer;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+}
+
+.text-label:hover .text-delete {
+  display: flex;
 }

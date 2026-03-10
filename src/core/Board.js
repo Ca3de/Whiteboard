@@ -1,54 +1,91 @@
 /**
- * Board — core domain model
+ * Board — core domain model for whiteboard
  *
- * Pure state management, no transport or storage concerns.
- * Emits events via callback so plugins/transport can react.
+ * Manages strokes, sticky notes, and text labels.
  */
 class Board {
-  constructor({ paths, onEvent }) {
-    this._tags = [];
-    this._paths = paths || [];
+  constructor({ onEvent }) {
+    this._strokes = [];
+    this._notes = [];
+    this._texts = [];
     this._onEvent = onEvent || (() => {});
   }
 
   get state() {
-    return { tags: [...this._tags], paths: [...this._paths] };
+    return {
+      strokes: [...this._strokes],
+      notes: [...this._notes],
+      texts: [...this._texts]
+    };
   }
 
-  loadTags(tags) {
-    this._tags = tags;
+  addStroke(stroke) {
+    this._strokes.push(stroke);
+    this._onEvent('stroke:added', { stroke });
+    return stroke;
   }
 
-  addPath(path) {
-    if (!this._paths.find(p => p.id === path.id)) {
-      this._paths.push(path);
-    }
+  addNote(note) {
+    this._notes.push(note);
+    this._onEvent('note:added', { note });
+    return note;
   }
 
-  createTag({ id, text, pathId, color }) {
-    const tag = { id, text, pathId, color };
-    this._tags.push(tag);
-    this._onEvent('tag:created', { tag });
-    return tag;
+  updateNote(id, changes) {
+    const note = this._notes.find(n => n.id === id);
+    if (!note) return null;
+    Object.assign(note, changes);
+    this._onEvent('note:updated', { id, ...changes });
+    return note;
   }
 
-  moveTag(id, pathId) {
-    const tag = this._tags.find(t => t.id === id);
-    if (!tag) return null;
-    if (!this._paths.find(p => p.id === pathId)) return null;
-    tag.pathId = pathId;
-    this._onEvent('tag:moved', { id, pathId });
-    return tag;
+  moveNote(id, x, y) {
+    return this.updateNote(id, { x, y });
   }
 
-  deleteTag(id) {
-    const before = this._tags.length;
-    this._tags = this._tags.filter(t => t.id !== id);
-    if (this._tags.length < before) {
-      this._onEvent('tag:deleted', { id });
+  deleteNote(id) {
+    const before = this._notes.length;
+    this._notes = this._notes.filter(n => n.id !== id);
+    if (this._notes.length < before) {
+      this._onEvent('note:deleted', { id });
       return true;
     }
     return false;
+  }
+
+  addText(textObj) {
+    this._texts.push(textObj);
+    this._onEvent('text:added', { textObj });
+    return textObj;
+  }
+
+  updateText(id, changes) {
+    const t = this._texts.find(t => t.id === id);
+    if (!t) return null;
+    Object.assign(t, changes);
+    this._onEvent('text:updated', { id, ...changes });
+    return t;
+  }
+
+  moveText(id, x, y) {
+    return this.updateText(id, { x, y });
+  }
+
+  deleteText(id) {
+    const before = this._texts.length;
+    this._texts = this._texts.filter(t => t.id !== id);
+    if (this._texts.length < before) {
+      this._onEvent('text:deleted', { id });
+      return true;
+    }
+    return false;
+  }
+
+  clear() {
+    this._strokes = [];
+    this._notes = [];
+    this._texts = [];
+    this._onEvent('cleared', {});
   }
 }
 
