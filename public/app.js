@@ -80,17 +80,47 @@ const State = {
 
 const Connection = (() => {
   let ws;
+  let pingInterval = null;
+  let reconnectDelay = 1000;
 
   function connect() {
     const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
-    ws = new WebSocket(`${protocol}://${location.host}`);
-    ws.onopen = () => EventBus.emit('connection:change', true);
-    ws.onclose = () => {
-      EventBus.emit('connection:change', false);
-      setTimeout(connect, 2000);
+    const url = `${protocol}://${location.host}`;
+    console.log('[WS] Connecting to', url);
+
+    ws = new WebSocket(url);
+
+    ws.onopen = () => {
+      console.log('[WS] Connected');
+      reconnectDelay = 1000;
+      EventBus.emit('connection:change', true);
+
+      // Client-side keepalive — send ping every 25s to prevent Fly proxy timeout
+      clearInterval(pingInterval);
+      pingInterval = setInterval(() => {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'ping' }));
+        }
+      }, 25000);
     };
+
+    ws.onclose = (e) => {
+      console.log('[WS] Disconnected, code:', e.code, 'reason:', e.reason);
+      clearInterval(pingInterval);
+      EventBus.emit('connection:change', false);
+      // Exponential backoff: 1s, 2s, 4s, max 10s
+      setTimeout(connect, reconnectDelay);
+      reconnectDelay = Math.min(reconnectDelay * 2, 10000);
+    };
+
+    ws.onerror = (e) => {
+      console.error('[WS] Error:', e);
+    };
+
     ws.onmessage = (e) => {
       const msg = JSON.parse(e.data);
+      if (msg.type === 'pong') return; // ignore keepalive responses
+      console.log('[WS] Received:', msg.type);
       EventBus.emit(`ws:${msg.type}`, msg);
     };
   }
@@ -98,6 +128,8 @@ const Connection = (() => {
   function send(data) {
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify(data));
+    } else {
+      console.warn('[WS] Cannot send, not connected. Message type:', data.type);
     }
   }
 

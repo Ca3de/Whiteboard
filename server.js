@@ -29,6 +29,11 @@ async function start() {
     res.json({ status: 'ok', timestamp: Date.now() });
   });
 
+  // REST endpoint for state — clients can verify sync is working
+  app.get('/api/state', (_req, res) => {
+    res.json(board.state);
+  });
+
   // --- WebSocket ---
 
   const wss = new WebSocket.Server({ server });
@@ -42,13 +47,51 @@ async function start() {
     });
   }
 
-  wss.on('connection', (ws) => {
+  // Heartbeat — ping every 30s to keep connections alive through Fly's proxy
+  const HEARTBEAT_INTERVAL = 30000;
+
+  function heartbeat() {
+    this.isAlive = true;
+  }
+
+  const pingInterval = setInterval(() => {
+    wss.clients.forEach(ws => {
+      if (ws.isAlive === false) {
+        console.log('[WS] Terminating dead connection');
+        return ws.terminate();
+      }
+      ws.isAlive = false;
+      ws.ping();
+    });
+  }, HEARTBEAT_INTERVAL);
+
+  wss.on('close', () => {
+    clearInterval(pingInterval);
+  });
+
+  wss.on('connection', (ws, req) => {
+    ws.isAlive = true;
+    ws.on('pong', heartbeat);
+
+    const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+    console.log(`[WS] Client connected from ${clientIp} (total: ${wss.clients.size})`);
+
     // Send full state to new client
-    ws.send(JSON.stringify({ type: 'init', state: board.state }));
+    const initPayload = JSON.stringify({ type: 'init', state: board.state });
+    ws.send(initPayload);
+    console.log(`[WS] Sent init state: ${board.state.boxes.length} boxes, ${board.state.strokes.length} strokes, ${board.state.notes.length} notes`);
 
     ws.on('message', (raw) => {
       let msg;
       try { msg = JSON.parse(raw); } catch { return; }
+
+      // Ignore ping messages from client-side keepalive
+      if (msg.type === 'ping') {
+        ws.send(JSON.stringify({ type: 'pong' }));
+        return;
+      }
+
+      console.log(`[WS] Received: ${msg.type}`);
 
       switch (msg.type) {
         // --- Boxes ---
@@ -156,11 +199,19 @@ async function start() {
         }
       }
     });
+
+    ws.on('close', () => {
+      console.log(`[WS] Client disconnected (remaining: ${wss.clients.size})`);
+    });
+
+    ws.on('error', (err) => {
+      console.error('[WS] Connection error:', err.message);
+    });
   });
 
   const PORT = process.env.PORT || 3000;
-  server.listen(PORT, () => {
-    console.log(`Whiteboard running at http://localhost:${PORT}`);
+  server.listen(PORT, '0.0.0.0', () => {
+    console.log(`Whiteboard running on 0.0.0.0:${PORT}`);
   });
 }
 
