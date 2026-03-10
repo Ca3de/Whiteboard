@@ -73,6 +73,7 @@ async function start() {
 
   app.post('/api/employees', (req, res) => {
     try {
+      console.log('[Server] POST /api/employees body:', JSON.stringify(req.body).slice(0, 200));
       const result = board.addOrUpdateEmployee(req.body);
       if (!result) {
         return res.status(400).json({ error: 'Invalid employee data' });

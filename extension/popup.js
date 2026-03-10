@@ -19,7 +19,7 @@ function loadServerStatus() {
   statusEl.className = '';
 
   chrome.runtime.sendMessage({ action: 'getWhiteboardUrl' }, (urlRes) => {
-    const url = urlRes && urlRes.url ? urlRes.url : 'https://whiteboard.fly.dev';
+    const url = urlRes && urlRes.url ? urlRes.url : 'https://ca3de-whiteboard.fly.dev';
     fetch(`${url}/api/ping`)
       .then(r => r.json())
       .then(data => {
