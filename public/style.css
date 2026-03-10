@@ -59,6 +59,28 @@ body {
 
 .spacer { flex: 1; }
 
+#tags-toggle-btn {
+  padding: 6px 14px;
+  background: transparent;
+  color: #a0aec0;
+  border: 1px solid #0f3460;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+#tags-toggle-btn:hover {
+  background: #0f3460;
+  color: #e0e0e0;
+}
+
+#tags-toggle-btn.active {
+  background: #0f3460;
+  color: #e94560;
+  border-color: #e94560;
+}
+
 #color-picker {
   width: 32px;
   height: 32px;
@@ -103,6 +125,156 @@ body {
 
 .status.connected { background: #0a3d2a; color: #4ade80; }
 .status.disconnected { background: #3d0a0a; color: #f87171; }
+
+/* Main area — sidebar + canvas */
+#main-area {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+/* ========== TAG PANEL ========== */
+.tag-panel {
+  width: 220px;
+  background: #16213e;
+  border-right: 2px solid #0f3460;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  z-index: 50;
+  transition: margin-left 0.2s;
+}
+
+.tag-panel.hidden {
+  margin-left: -220px;
+}
+
+.tag-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-bottom: 1px solid #0f3460;
+  font-weight: 700;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #a0aec0;
+}
+
+.tag-panel-header button {
+  background: none;
+  border: none;
+  color: #a0aec0;
+  cursor: pointer;
+  font-size: 1.1rem;
+}
+
+.tag-panel-header button:hover { color: #e0e0e0; }
+
+#tag-palette {
+  flex: 1;
+  padding: 10px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Palette tag items */
+.palette-tag {
+  padding: 8px 12px;
+  background: #1a1a2e;
+  border: 1px solid #0f3460;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: grab;
+  user-select: none;
+  transition: all 0.15s;
+  color: #e0e0e0;
+}
+
+.palette-tag:hover {
+  border-color: #e94560;
+  background: #1e2444;
+}
+
+.palette-tag.placed {
+  opacity: 0.3;
+  cursor: default;
+  border-color: transparent;
+}
+
+.palette-tag.placed::after {
+  content: ' (on board)';
+  font-weight: 400;
+  font-size: 0.7rem;
+  color: #a0aec0;
+}
+
+/* ========== Tags on the board ========== */
+.board-tag {
+  position: absolute;
+  padding: 6px 12px;
+  background: #e94560;
+  color: white;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: grab;
+  pointer-events: auto;
+  user-select: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  transition: box-shadow 0.15s, opacity 0.15s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  z-index: 10;
+}
+
+.board-tag:hover {
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+}
+
+.board-tag.locked {
+  opacity: 0.5;
+  cursor: not-allowed;
+  outline: 2px dashed #f87171;
+  outline-offset: 2px;
+}
+
+.board-tag.locked-by-me {
+  opacity: 1;
+  cursor: grabbing;
+  outline: 2px solid #4ade80;
+  outline-offset: 2px;
+}
+
+.board-tag .tag-remove-btn {
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  font-size: 0.9rem;
+  opacity: 0;
+  transition: opacity 0.15s;
+  padding: 0;
+  line-height: 1;
+}
+
+.board-tag:hover .tag-remove-btn {
+  opacity: 0.7;
+}
+
+.board-tag .tag-remove-btn:hover {
+  opacity: 1;
+}
+
+.board-tag.locked .tag-remove-btn {
+  display: none;
+}
 
 /* Canvas area */
 #canvas-container {
@@ -165,9 +337,7 @@ body {
   transition: opacity 0.15s;
 }
 
-.process-box:hover .box-actions {
-  opacity: 1;
-}
+.process-box:hover .box-actions { opacity: 1; }
 
 .process-box .box-actions button {
   background: none;
@@ -201,9 +371,7 @@ body {
   transition: opacity 0.15s;
 }
 
-.process-box:hover .box-resize-handle {
-  opacity: 0.5;
-}
+.process-box:hover .box-resize-handle { opacity: 0.5; }
 
 .process-box .box-resize-handle::after {
   content: '';
@@ -361,9 +529,7 @@ body {
   outline: none;
 }
 
-.dialog input[type="text"]:focus {
-  border-color: #e94560;
-}
+.dialog input[type="text"]:focus { border-color: #e94560; }
 
 .dialog-error {
   color: #f87171;

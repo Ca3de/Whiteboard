@@ -2,6 +2,7 @@ const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
 const path = require('path');
+const crypto = require('crypto');
 
 const PluginManager = require('./src/core/PluginManager');
 const Board = require('./src/core/Board');
@@ -29,7 +30,6 @@ async function start() {
     res.json({ status: 'ok', timestamp: Date.now() });
   });
 
-  // REST endpoint for state — clients can verify sync is working
   app.get('/api/state', (_req, res) => {
     res.json(board.state);
   });
@@ -47,7 +47,16 @@ async function start() {
     });
   }
 
-  // Heartbeat — ping every 30s to keep connections alive through Fly's proxy
+  function broadcastAll(data) {
+    const message = JSON.stringify(data);
+    wss.clients.forEach(client => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(message);
+      }
+    });
+  }
+
+  // Heartbeat
   const HEARTBEAT_INTERVAL = 30000;
 
   function heartbeat() {
@@ -73,27 +82,69 @@ async function start() {
     ws.isAlive = true;
     ws.on('pong', heartbeat);
 
-    const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
-    console.log(`[WS] Client connected from ${clientIp} (total: ${wss.clients.size})`);
+    // Assign a unique session ID to this connection
+    ws.sessionId = crypto.randomUUID();
 
-    // Send full state to new client
-    const initPayload = JSON.stringify({ type: 'init', state: board.state });
-    ws.send(initPayload);
-    console.log(`[WS] Sent init state: ${board.state.boxes.length} boxes, ${board.state.strokes.length} strokes, ${board.state.notes.length} notes`);
+    const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+    console.log(`[WS] Client connected: ${ws.sessionId} from ${clientIp} (total: ${wss.clients.size})`);
+
+    // Send full state + session ID
+    ws.send(JSON.stringify({
+      type: 'init',
+      sessionId: ws.sessionId,
+      state: board.state
+    }));
 
     ws.on('message', (raw) => {
       let msg;
       try { msg = JSON.parse(raw); } catch { return; }
 
-      // Ignore ping messages from client-side keepalive
       if (msg.type === 'ping') {
         ws.send(JSON.stringify({ type: 'pong' }));
         return;
       }
 
-      console.log(`[WS] Received: ${msg.type}`);
+      console.log(`[WS] ${ws.sessionId}: ${msg.type}`);
 
       switch (msg.type) {
+        // --- Tags ---
+        case 'tag:place': {
+          const tag = board.placeTag(msg.tagId, msg.x, msg.y);
+          if (tag) {
+            broadcastAll({ type: 'tag:placed', tag });
+          }
+          break;
+        }
+        case 'tag:lock': {
+          const tag = board.lockTag(msg.tagId, ws.sessionId);
+          if (tag) {
+            broadcastAll({ type: 'tag:locked', id: msg.tagId, lockedBy: ws.sessionId });
+          } else {
+            ws.send(JSON.stringify({ type: 'tag:lock-denied', id: msg.tagId }));
+          }
+          break;
+        }
+        case 'tag:move': {
+          const tag = board.moveTag(msg.tagId, msg.x, msg.y, ws.sessionId);
+          if (tag) {
+            broadcast({ type: 'tag:moved', id: msg.tagId, x: msg.x, y: msg.y }, ws);
+          }
+          break;
+        }
+        case 'tag:unlock': {
+          const tag = board.unlockTag(msg.tagId, ws.sessionId);
+          if (tag) {
+            broadcastAll({ type: 'tag:unlocked', id: msg.tagId, x: tag.x, y: tag.y });
+          }
+          break;
+        }
+        case 'tag:remove': {
+          if (board.removeTagFromBoard(msg.tagId)) {
+            broadcastAll({ type: 'tag:removed', id: msg.tagId });
+          }
+          break;
+        }
+
         // --- Boxes ---
         case 'box:add': {
           const box = board.addBox(msg.box);
@@ -201,7 +252,13 @@ async function start() {
     });
 
     ws.on('close', () => {
-      console.log(`[WS] Client disconnected (remaining: ${wss.clients.size})`);
+      // Release any locks this session held
+      const released = board.releaseSessionLocks(ws.sessionId);
+      released.forEach(tagId => {
+        const tag = board.state.placedTags.find(t => t.id === tagId);
+        broadcastAll({ type: 'tag:unlocked', id: tagId, x: tag ? tag.x : 0, y: tag ? tag.y : 0 });
+      });
+      console.log(`[WS] Client ${ws.sessionId} disconnected (released ${released.length} locks, remaining: ${wss.clients.size})`);
     });
 
     ws.on('error', (err) => {
