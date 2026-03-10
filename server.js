@@ -39,6 +39,11 @@ async function start() {
     res.json({ provider: provider.providerName });
   });
 
+  // Keep-alive endpoint — extension pings this every 5 min to prevent Glitch sleep
+  app.get('/api/ping', (_req, res) => {
+    res.json({ status: 'awake', timestamp: Date.now() });
+  });
+
   // --- WebSocket ---
 
   const wss = new WebSocket.Server({ server });

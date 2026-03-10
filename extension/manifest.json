@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "Whiteboard Connector",
+  "version": "1.0.0",
+  "description": "Keeps the Whiteboard alive and syncs tag permissions from the work network",
+  "permissions": ["alarms", "storage"],
+  "host_permissions": [
+    "https://*.glitch.me/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html"
+  }
+}
