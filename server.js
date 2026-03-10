@@ -18,9 +18,39 @@ const board = new Board({
   }
 });
 
+// Seed the AA roster so badges appear in the palette immediately.
+// The extension sync will update names and permissions later.
+const AA_ROSTER = [
+  'alicpops', 'smmahma', 'mawngsui', 'kahlcame', 'rrodrigq',
+  'kamvan', 'naiamzn', 'ththan', 'ktthawng', 'hougeuni',
+  'mureknya', 'shabjmoh', 'malabigk', 'pregaell', 'germbadb',
+  'suchante', 'lthana', 'ngutling', 'nilianz', 'umyothan',
+  'zdesstay', 'dawtling', 'pahupwin', 'thluacim', 'iranbash',
+  'tijosep', 'lgaljuan', 'vankims', 'wluthang', 'hrialalj',
+  'dialmmah', 'thluangu', 'aunpi', 'tawtan', 'qmaaye',
+  'damiakij', 'pahenris', 'barljenn', 'stjeakez', 'abebayet',
+  'jeanropi', 'vilsmois', 'zbourfra', 'htikewin', 'rwweldea',
+  'avlia', 'wblacksm', 'tedromih', 'jakoreyn', 'wrmarcia',
+  'donettaj', 'masengap', 'belavlag', 'boithan', 'jacqamic',
+  'hnijenny', 'simpjony', 'angladch', 'lkawl', 'wkhanars',
+  'lzohming', 'ronalcou', 'szweldey', 'whabebec', 'genebezu',
+  'uniscer', 'alzamb'
+];
+
 async function start() {
   plugins.register(LoggerPlugin);
   await plugins.initAll({ board });
+
+  // Seed employees from roster
+  AA_ROSTER.forEach(login => {
+    board.addOrUpdateEmployee({
+      employee: { login, name: login },
+      permissions: {},
+      source: 'roster',
+      timestamp: Date.now()
+    });
+  });
+  console.log(`[Seed] ${AA_ROSTER.length} AAs loaded into badge palette`);
 
   const app = express();
   const server = http.createServer(app);
