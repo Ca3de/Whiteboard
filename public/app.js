@@ -1,8 +1,8 @@
 /**
- * Whiteboard — Freeform drawing, sticky notes, text labels
+ * Whiteboard — Boxes (process paths), drawing, sticky notes, text
  *
- * Tools: select, draw, note, text
- * Real-time sync via WebSocket
+ * Boxes are the primary object: named containers representing process paths.
+ * Each box name must be unique. All state syncs in real-time via WebSocket.
  */
 
 // --- EventBus ---
@@ -23,25 +23,41 @@ const EventBus = (() => {
 // --- State ---
 
 const State = {
+  boxes: [],     // { id, name, x, y, w, h, color }
   strokes: [],   // { id, points: [{x,y}], color, width }
   notes: [],     // { id, x, y, text, color }
   texts: [],     // { id, x, y, text, color }
 
   load(data) {
+    this.boxes = data.boxes || [];
     this.strokes = data.strokes || [];
     this.notes = data.notes || [];
     this.texts = data.texts || [];
   },
 
   clear() {
+    this.boxes = [];
     this.strokes = [];
     this.notes = [];
     this.texts = [];
   },
 
-  addStroke(s) { this.strokes.push(s); },
-  removeStroke(id) { this.strokes = this.strokes.filter(s => s.id !== id); },
+  // Boxes
+  addBox(b) { this.boxes.push(b); },
+  updateBox(id, changes) {
+    const b = this.boxes.find(b => b.id === id);
+    if (b) Object.assign(b, changes);
+    return b;
+  },
+  removeBox(id) { this.boxes = this.boxes.filter(b => b.id !== id); },
+  isNameTaken(name, excludeId) {
+    return this.boxes.some(b => b.name.toLowerCase() === name.toLowerCase() && b.id !== excludeId);
+  },
 
+  // Strokes
+  addStroke(s) { this.strokes.push(s); },
+
+  // Notes
   addNote(n) { this.notes.push(n); },
   updateNote(id, changes) {
     const n = this.notes.find(n => n.id === id);
@@ -50,6 +66,7 @@ const State = {
   },
   removeNote(id) { this.notes = this.notes.filter(n => n.id !== id); },
 
+  // Texts
   addText(t) { this.texts.push(t); },
   updateText(id, changes) {
     const t = this.texts.find(t => t.id === id);
@@ -87,7 +104,7 @@ const Connection = (() => {
   return { connect, send };
 })();
 
-// --- Canvas drawing ---
+// --- Canvas ---
 
 const canvas = document.getElementById('whiteboard');
 const ctx = canvas.getContext('2d');
@@ -102,24 +119,18 @@ function resizeCanvas() {
 function redraw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  // Draw grid
+  // Grid
   ctx.strokeStyle = 'rgba(255,255,255,0.03)';
   ctx.lineWidth = 1;
   const gridSize = 40;
   for (let x = 0; x < canvas.width; x += gridSize) {
-    ctx.beginPath();
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x, canvas.height);
-    ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
   }
   for (let y = 0; y < canvas.height; y += gridSize) {
-    ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.lineTo(canvas.width, y);
-    ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
   }
 
-  // Draw strokes
+  // Strokes
   State.strokes.forEach(stroke => {
     if (stroke.points.length < 2) return;
     ctx.beginPath();
@@ -144,8 +155,12 @@ let isDrawing = false;
 let currentStroke = null;
 let dragTarget = null;
 let dragOffset = { x: 0, y: 0 };
+let resizeTarget = null;
+let resizeStart = { x: 0, y: 0, w: 0, h: 0 };
 
+const BOX_COLORS = ['box-red', 'box-blue', 'box-green', 'box-orange', 'box-purple', 'box-teal'];
 const NOTE_COLORS = ['note-yellow', 'note-pink', 'note-blue', 'note-green', 'note-purple'];
+let boxColorIndex = 0;
 
 function uid() {
   return Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7);
@@ -161,6 +176,7 @@ document.querySelectorAll('.tool').forEach(btn => {
 
     const container = document.getElementById('canvas-container');
     if (currentTool === 'select') container.style.cursor = 'default';
+    else if (currentTool === 'box') container.style.cursor = 'copy';
     else if (currentTool === 'draw') container.style.cursor = 'crosshair';
     else if (currentTool === 'note') container.style.cursor = 'copy';
     else if (currentTool === 'text') container.style.cursor = 'text';
@@ -182,7 +198,119 @@ document.getElementById('clear-btn').addEventListener('click', () => {
   Connection.send({ type: 'clear' });
 });
 
-// --- Canvas events (drawing) ---
+// --- Box dialog ---
+
+let pendingBoxPosition = null;
+
+function showBoxDialog(x, y) {
+  pendingBoxPosition = { x, y };
+  const dialog = document.getElementById('box-dialog');
+  const input = document.getElementById('box-name-input');
+  const error = document.getElementById('box-name-error');
+  dialog.style.display = 'flex';
+  input.value = '';
+  error.textContent = '';
+  input.focus();
+}
+
+function hideBoxDialog() {
+  document.getElementById('box-dialog').style.display = 'none';
+  pendingBoxPosition = null;
+}
+
+document.getElementById('box-create-btn').addEventListener('click', () => {
+  const input = document.getElementById('box-name-input');
+  const error = document.getElementById('box-name-error');
+  const name = input.value.trim();
+
+  if (!name) {
+    error.textContent = 'Name is required';
+    return;
+  }
+  if (State.isNameTaken(name)) {
+    error.textContent = 'A box with this name already exists';
+    return;
+  }
+
+  const box = {
+    id: uid(),
+    name,
+    x: pendingBoxPosition.x,
+    y: pendingBoxPosition.y,
+    w: 280,
+    h: 200,
+    color: BOX_COLORS[boxColorIndex++ % BOX_COLORS.length]
+  };
+
+  Connection.send({ type: 'box:add', box });
+  hideBoxDialog();
+});
+
+document.getElementById('box-cancel-btn').addEventListener('click', hideBoxDialog);
+
+document.getElementById('box-name-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') document.getElementById('box-create-btn').click();
+  if (e.key === 'Escape') hideBoxDialog();
+});
+
+// Prevent clicks on dialog overlay from creating objects
+document.getElementById('box-dialog').addEventListener('mousedown', (e) => {
+  if (e.target === e.currentTarget) hideBoxDialog();
+});
+
+// --- Rename dialog ---
+
+let renameBoxId = null;
+
+function showRenameDialog(boxId) {
+  const box = State.boxes.find(b => b.id === boxId);
+  if (!box) return;
+  renameBoxId = boxId;
+  const dialog = document.getElementById('rename-dialog');
+  const input = document.getElementById('rename-input');
+  const error = document.getElementById('rename-error');
+  dialog.style.display = 'flex';
+  input.value = box.name;
+  error.textContent = '';
+  input.focus();
+  input.select();
+}
+
+function hideRenameDialog() {
+  document.getElementById('rename-dialog').style.display = 'none';
+  renameBoxId = null;
+}
+
+document.getElementById('rename-save-btn').addEventListener('click', () => {
+  const input = document.getElementById('rename-input');
+  const error = document.getElementById('rename-error');
+  const name = input.value.trim();
+
+  if (!name) {
+    error.textContent = 'Name is required';
+    return;
+  }
+  if (State.isNameTaken(name, renameBoxId)) {
+    error.textContent = 'A box with this name already exists';
+    return;
+  }
+
+  Connection.send({ type: 'box:rename', id: renameBoxId, name });
+  hideRenameDialog();
+});
+
+document.getElementById('rename-cancel-btn').addEventListener('click', hideRenameDialog);
+
+document.getElementById('rename-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') document.getElementById('rename-save-btn').click();
+  if (e.key === 'Escape') hideRenameDialog();
+});
+
+document.getElementById('rename-dialog').addEventListener('mousedown', (e) => {
+  if (e.target === e.currentTarget) hideRenameDialog();
+});
+
+// --- Canvas events ---
 
 canvas.addEventListener('mousedown', (e) => {
   const rect = canvas.getBoundingClientRect();
@@ -197,6 +325,8 @@ canvas.addEventListener('mousedown', (e) => {
       color: currentColor,
       width: currentStrokeWidth
     };
+  } else if (currentTool === 'box') {
+    showBoxDialog(x, y);
   } else if (currentTool === 'note') {
     createNote(x, y);
   } else if (currentTool === 'text') {
@@ -207,27 +337,23 @@ canvas.addEventListener('mousedown', (e) => {
 canvas.addEventListener('mousemove', (e) => {
   if (!isDrawing || currentTool !== 'draw') return;
   const rect = canvas.getBoundingClientRect();
-  const x = e.clientX - rect.left;
-  const y = e.clientY - rect.top;
-  currentStroke.points.push({ x, y });
+  currentStroke.points.push({ x: e.clientX - rect.left, y: e.clientY - rect.top });
   redraw();
 
   // Draw in-progress stroke
-  if (currentStroke.points.length >= 2) {
-    ctx.beginPath();
-    ctx.strokeStyle = currentStroke.color;
-    ctx.lineWidth = currentStroke.width;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.moveTo(currentStroke.points[0].x, currentStroke.points[0].y);
-    for (let i = 1; i < currentStroke.points.length; i++) {
-      ctx.lineTo(currentStroke.points[i].x, currentStroke.points[i].y);
-    }
-    ctx.stroke();
+  ctx.beginPath();
+  ctx.strokeStyle = currentStroke.color;
+  ctx.lineWidth = currentStroke.width;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.moveTo(currentStroke.points[0].x, currentStroke.points[0].y);
+  for (let i = 1; i < currentStroke.points.length; i++) {
+    ctx.lineTo(currentStroke.points[i].x, currentStroke.points[i].y);
   }
+  ctx.stroke();
 });
 
-canvas.addEventListener('mouseup', () => {
+function finishStroke() {
   if (isDrawing && currentStroke && currentStroke.points.length >= 2) {
     State.addStroke(currentStroke);
     Connection.send({ type: 'stroke:add', stroke: currentStroke });
@@ -235,59 +361,98 @@ canvas.addEventListener('mouseup', () => {
   }
   isDrawing = false;
   currentStroke = null;
-});
+}
 
-canvas.addEventListener('mouseleave', () => {
-  if (isDrawing && currentStroke && currentStroke.points.length >= 2) {
-    State.addStroke(currentStroke);
-    Connection.send({ type: 'stroke:add', stroke: currentStroke });
-    redraw();
-  }
-  isDrawing = false;
-  currentStroke = null;
-});
+canvas.addEventListener('mouseup', finishStroke);
+canvas.addEventListener('mouseleave', finishStroke);
 
-// --- Sticky notes ---
+// --- Notes & Text ---
 
 function createNote(x, y) {
   const note = {
-    id: uid(),
-    x, y,
+    id: uid(), x, y,
     text: '',
     color: NOTE_COLORS[Math.floor(Math.random() * NOTE_COLORS.length)]
   };
   State.addNote(note);
   Connection.send({ type: 'note:add', note });
   renderObjects();
-
-  // Focus the new note
   const el = document.querySelector(`[data-note-id="${note.id}"] .note-content`);
   if (el) el.focus();
 }
 
 function createText(x, y) {
-  const text = {
-    id: uid(),
-    x, y,
-    text: 'Text',
-    color: currentColor
-  };
+  const text = { id: uid(), x, y, text: 'Text', color: currentColor };
   State.addText(text);
   Connection.send({ type: 'text:add', textObj: text });
   renderObjects();
-
   const el = document.querySelector(`[data-text-id="${text.id}"]`);
-  if (el) {
-    el.focus();
-    document.execCommand('selectAll');
-  }
+  if (el) { el.focus(); document.execCommand('selectAll'); }
 }
+
+// --- Render all objects ---
 
 function renderObjects() {
   const layer = document.getElementById('objects-layer');
   layer.innerHTML = '';
 
-  // Render sticky notes
+  // Boxes (process paths)
+  State.boxes.forEach(box => {
+    const el = document.createElement('div');
+    el.className = `process-box ${box.color}`;
+    el.dataset.boxId = box.id;
+    el.style.left = box.x + 'px';
+    el.style.top = box.y + 'px';
+    el.style.width = box.w + 'px';
+    el.style.height = box.h + 'px';
+    el.innerHTML = `
+      <div class="box-header">
+        <span class="box-name">${escapeHtml(box.name)}</span>
+        <div class="box-actions">
+          <button class="box-rename-btn" title="Rename">&#9998;</button>
+          <button class="box-delete-btn" title="Delete">&times;</button>
+        </div>
+      </div>
+      <div class="box-body"></div>
+      <div class="box-resize-handle"></div>
+    `;
+
+    // Drag via header
+    el.querySelector('.box-header').addEventListener('mousedown', (e) => {
+      if (e.target.closest('.box-actions')) return;
+      dragTarget = { type: 'box', id: box.id, el };
+      dragOffset.x = e.clientX - box.x;
+      dragOffset.y = e.clientY - box.y;
+      el.classList.add('dragging');
+      e.preventDefault();
+    });
+
+    // Resize handle
+    el.querySelector('.box-resize-handle').addEventListener('mousedown', (e) => {
+      resizeTarget = { id: box.id, el };
+      resizeStart = { x: e.clientX, y: e.clientY, w: box.w, h: box.h };
+      e.preventDefault();
+      e.stopPropagation();
+    });
+
+    // Rename
+    el.querySelector('.box-rename-btn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      showRenameDialog(box.id);
+    });
+
+    // Delete
+    el.querySelector('.box-delete-btn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      State.removeBox(box.id);
+      Connection.send({ type: 'box:delete', id: box.id });
+      renderObjects();
+    });
+
+    layer.appendChild(el);
+  });
+
+  // Sticky notes
   State.notes.forEach(note => {
     const el = document.createElement('div');
     el.className = `sticky-note ${note.color}`;
@@ -299,7 +464,6 @@ function renderObjects() {
       <button class="note-delete">&times;</button>
     `;
 
-    // Drag
     el.addEventListener('mousedown', (e) => {
       if (e.target.classList.contains('note-content') || e.target.classList.contains('note-delete')) return;
       dragTarget = { type: 'note', id: note.id, el };
@@ -309,13 +473,11 @@ function renderObjects() {
       e.preventDefault();
     });
 
-    // Edit
     el.querySelector('.note-content').addEventListener('input', (e) => {
       State.updateNote(note.id, { text: e.target.value });
       Connection.send({ type: 'note:update', id: note.id, text: e.target.value });
     });
 
-    // Delete
     el.querySelector('.note-delete').addEventListener('click', () => {
       State.removeNote(note.id);
       Connection.send({ type: 'note:delete', id: note.id });
@@ -325,7 +487,7 @@ function renderObjects() {
     layer.appendChild(el);
   });
 
-  // Render text labels
+  // Text labels
   State.texts.forEach(t => {
     const el = document.createElement('div');
     el.className = 'text-label';
@@ -339,14 +501,14 @@ function renderObjects() {
 
     el.addEventListener('mousedown', (e) => {
       if (e.target.classList.contains('text-delete')) return;
-      if (document.activeElement === el) return; // allow editing
+      if (document.activeElement === el) return;
       dragTarget = { type: 'text', id: t.id, el };
       dragOffset.x = e.clientX - t.x;
       dragOffset.y = e.clientY - t.y;
       el.classList.add('dragging');
     });
 
-    el.addEventListener('input', (e) => {
+    el.addEventListener('input', () => {
       const newText = el.childNodes[0]?.textContent || '';
       State.updateText(t.id, { text: newText });
       Connection.send({ type: 'text:update', id: t.id, text: newText });
@@ -362,28 +524,40 @@ function renderObjects() {
   });
 }
 
-// Global drag handling
+// --- Global drag / resize handling ---
+
 document.addEventListener('mousemove', (e) => {
-  if (!dragTarget) return;
-  const container = document.getElementById('canvas-container');
-  const rect = container.getBoundingClientRect();
-  const x = e.clientX - dragOffset.x;
-  const y = e.clientY - dragOffset.y;
+  // Drag
+  if (dragTarget) {
+    const x = e.clientX - dragOffset.x;
+    const y = e.clientY - dragOffset.y;
+    dragTarget.el.style.left = x + 'px';
+    dragTarget.el.style.top = y + 'px';
 
-  dragTarget.el.style.left = x + 'px';
-  dragTarget.el.style.top = y + 'px';
+    if (dragTarget.type === 'box') State.updateBox(dragTarget.id, { x, y });
+    else if (dragTarget.type === 'note') State.updateNote(dragTarget.id, { x, y });
+    else if (dragTarget.type === 'text') State.updateText(dragTarget.id, { x, y });
+  }
 
-  if (dragTarget.type === 'note') {
-    State.updateNote(dragTarget.id, { x, y });
-  } else if (dragTarget.type === 'text') {
-    State.updateText(dragTarget.id, { x, y });
+  // Resize
+  if (resizeTarget) {
+    const dx = e.clientX - resizeStart.x;
+    const dy = e.clientY - resizeStart.y;
+    const w = Math.max(200, resizeStart.w + dx);
+    const h = Math.max(150, resizeStart.h + dy);
+    resizeTarget.el.style.width = w + 'px';
+    resizeTarget.el.style.height = h + 'px';
+    State.updateBox(resizeTarget.id, { w, h });
   }
 });
 
 document.addEventListener('mouseup', () => {
   if (dragTarget) {
     dragTarget.el.classList.remove('dragging');
-    if (dragTarget.type === 'note') {
+    if (dragTarget.type === 'box') {
+      const b = State.boxes.find(b => b.id === dragTarget.id);
+      if (b) Connection.send({ type: 'box:move', id: b.id, x: b.x, y: b.y });
+    } else if (dragTarget.type === 'note') {
       const n = State.notes.find(n => n.id === dragTarget.id);
       if (n) Connection.send({ type: 'note:move', id: n.id, x: n.x, y: n.y });
     } else if (dragTarget.type === 'text') {
@@ -391,6 +565,12 @@ document.addEventListener('mouseup', () => {
       if (t) Connection.send({ type: 'text:move', id: t.id, x: t.x, y: t.y });
     }
     dragTarget = null;
+  }
+
+  if (resizeTarget) {
+    const b = State.boxes.find(b => b.id === resizeTarget.id);
+    if (b) Connection.send({ type: 'box:resize', id: b.id, w: b.w, h: b.h });
+    resizeTarget = null;
   }
 });
 
@@ -408,51 +588,64 @@ EventBus.on('ws:init', (msg) => {
   renderObjects();
 });
 
+// Boxes
+EventBus.on('ws:box:added', (msg) => {
+  if (!State.boxes.find(b => b.id === msg.box.id)) {
+    State.addBox(msg.box);
+  }
+  renderObjects();
+});
+
+EventBus.on('ws:box:moved', (msg) => {
+  State.updateBox(msg.id, { x: msg.x, y: msg.y });
+  renderObjects();
+});
+
+EventBus.on('ws:box:resized', (msg) => {
+  State.updateBox(msg.id, { w: msg.w, h: msg.h });
+  renderObjects();
+});
+
+EventBus.on('ws:box:renamed', (msg) => {
+  State.updateBox(msg.id, { name: msg.name });
+  renderObjects();
+});
+
+EventBus.on('ws:box:deleted', (msg) => {
+  State.removeBox(msg.id);
+  renderObjects();
+});
+
+EventBus.on('ws:box:error', (msg) => {
+  // Show error in whichever dialog is open
+  const boxErr = document.getElementById('box-name-error');
+  const renameErr = document.getElementById('rename-error');
+  if (boxErr && document.getElementById('box-dialog').style.display !== 'none') {
+    boxErr.textContent = msg.message;
+  } else if (renameErr && document.getElementById('rename-dialog').style.display !== 'none') {
+    renameErr.textContent = msg.message;
+  }
+});
+
+// Strokes
 EventBus.on('ws:stroke:added', (msg) => {
   State.addStroke(msg.stroke);
   redraw();
 });
 
-EventBus.on('ws:note:added', (msg) => {
-  State.addNote(msg.note);
-  renderObjects();
-});
+// Notes
+EventBus.on('ws:note:added', (msg) => { State.addNote(msg.note); renderObjects(); });
+EventBus.on('ws:note:updated', (msg) => { State.updateNote(msg.id, { text: msg.text }); renderObjects(); });
+EventBus.on('ws:note:moved', (msg) => { State.updateNote(msg.id, { x: msg.x, y: msg.y }); renderObjects(); });
+EventBus.on('ws:note:deleted', (msg) => { State.removeNote(msg.id); renderObjects(); });
 
-EventBus.on('ws:note:updated', (msg) => {
-  State.updateNote(msg.id, { text: msg.text });
-  renderObjects();
-});
+// Texts
+EventBus.on('ws:text:added', (msg) => { State.addText(msg.textObj); renderObjects(); });
+EventBus.on('ws:text:updated', (msg) => { State.updateText(msg.id, { text: msg.text }); renderObjects(); });
+EventBus.on('ws:text:moved', (msg) => { State.updateText(msg.id, { x: msg.x, y: msg.y }); renderObjects(); });
+EventBus.on('ws:text:deleted', (msg) => { State.removeText(msg.id); renderObjects(); });
 
-EventBus.on('ws:note:moved', (msg) => {
-  State.updateNote(msg.id, { x: msg.x, y: msg.y });
-  renderObjects();
-});
-
-EventBus.on('ws:note:deleted', (msg) => {
-  State.removeNote(msg.id);
-  renderObjects();
-});
-
-EventBus.on('ws:text:added', (msg) => {
-  State.addText(msg.textObj);
-  renderObjects();
-});
-
-EventBus.on('ws:text:updated', (msg) => {
-  State.updateText(msg.id, { text: msg.text });
-  renderObjects();
-});
-
-EventBus.on('ws:text:moved', (msg) => {
-  State.updateText(msg.id, { x: msg.x, y: msg.y });
-  renderObjects();
-});
-
-EventBus.on('ws:text:deleted', (msg) => {
-  State.removeText(msg.id);
-  renderObjects();
-});
-
+// Clear
 EventBus.on('ws:cleared', () => {
   State.clear();
   redraw();

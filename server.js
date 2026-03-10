@@ -21,8 +21,6 @@ async function start() {
   plugins.register(LoggerPlugin);
   await plugins.initAll({ board });
 
-  // --- HTTP ---
-
   const app = express();
   const server = http.createServer(app);
   app.use(express.static(path.join(__dirname, 'public')));
@@ -45,6 +43,7 @@ async function start() {
   }
 
   wss.on('connection', (ws) => {
+    // Send full state to new client
     ws.send(JSON.stringify({ type: 'init', state: board.state }));
 
     ws.on('message', (raw) => {
@@ -52,11 +51,54 @@ async function start() {
       try { msg = JSON.parse(raw); } catch { return; }
 
       switch (msg.type) {
+        // --- Boxes ---
+        case 'box:add': {
+          const box = board.addBox(msg.box);
+          if (box) {
+            broadcast({ type: 'box:added', box }, ws);
+            ws.send(JSON.stringify({ type: 'box:added', box }));
+          } else {
+            ws.send(JSON.stringify({ type: 'box:error', message: 'Name already taken' }));
+          }
+          break;
+        }
+        case 'box:move': {
+          if (board.moveBox(msg.id, msg.x, msg.y)) {
+            broadcast({ type: 'box:moved', id: msg.id, x: msg.x, y: msg.y }, ws);
+          }
+          break;
+        }
+        case 'box:resize': {
+          if (board.resizeBox(msg.id, msg.w, msg.h)) {
+            broadcast({ type: 'box:resized', id: msg.id, w: msg.w, h: msg.h }, ws);
+          }
+          break;
+        }
+        case 'box:rename': {
+          const box = board.updateBox(msg.id, { name: msg.name });
+          if (box) {
+            broadcast({ type: 'box:renamed', id: msg.id, name: msg.name }, ws);
+            ws.send(JSON.stringify({ type: 'box:renamed', id: msg.id, name: msg.name }));
+          } else {
+            ws.send(JSON.stringify({ type: 'box:error', message: 'Name already taken' }));
+          }
+          break;
+        }
+        case 'box:delete': {
+          if (board.deleteBox(msg.id)) {
+            broadcast({ type: 'box:deleted', id: msg.id }, ws);
+          }
+          break;
+        }
+
+        // --- Strokes ---
         case 'stroke:add': {
           board.addStroke(msg.stroke);
           broadcast({ type: 'stroke:added', stroke: msg.stroke }, ws);
           break;
         }
+
+        // --- Notes ---
         case 'note:add': {
           board.addNote(msg.note);
           broadcast({ type: 'note:added', note: msg.note }, ws);
@@ -80,6 +122,8 @@ async function start() {
           }
           break;
         }
+
+        // --- Text ---
         case 'text:add': {
           board.addText(msg.textObj);
           broadcast({ type: 'text:added', textObj: msg.textObj }, ws);
@@ -103,6 +147,8 @@ async function start() {
           }
           break;
         }
+
+        // --- Clear ---
         case 'clear': {
           board.clear();
           broadcast({ type: 'cleared' }, ws);
@@ -111,8 +157,6 @@ async function start() {
       }
     });
   });
-
-  // --- Listen ---
 
   const PORT = process.env.PORT || 3000;
   server.listen(PORT, () => {
