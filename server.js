@@ -39,9 +39,9 @@ async function start() {
     res.json({ provider: provider.providerName });
   });
 
-  // Keep-alive endpoint — extension pings this every 5 min to prevent Glitch sleep
+  // Health check endpoint
   app.get('/api/ping', (_req, res) => {
-    res.json({ status: 'awake', timestamp: Date.now() });
+    res.json({ status: 'ok', timestamp: Date.now() });
   });
 
   // --- WebSocket ---

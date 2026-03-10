@@ -2,10 +2,10 @@
   "manifest_version": 3,
   "name": "Whiteboard Connector",
   "version": "1.0.0",
-  "description": "Keeps the Whiteboard alive and syncs tag permissions from the work network",
+  "description": "Syncs tag permissions from the work network to the Whiteboard",
   "permissions": ["alarms", "storage"],
   "host_permissions": [
-    "https://*.glitch.me/*"
+    "https://*.fly.dev/*"
   ],
   "background": {
     "service_worker": "background.js"

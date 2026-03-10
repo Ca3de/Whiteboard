@@ -1,14 +1,14 @@
-const WHITEBOARD_URL = 'https://YOUR-PROJECT.glitch.me'; // TODO: match background.js
+const WHITEBOARD_URL = 'https://whiteboard.fly.dev'; // TODO: match background.js
 
 const statusEl = document.getElementById('status');
 
-async function ping() {
-  statusEl.textContent = 'Pinging...';
+async function checkStatus() {
+  statusEl.textContent = 'Checking...';
   statusEl.className = '';
   try {
     const res = await fetch(`${WHITEBOARD_URL}/api/ping`);
     const data = await res.json();
-    statusEl.textContent = `Awake — ${new Date(data.timestamp).toLocaleTimeString()}`;
+    statusEl.textContent = `Connected — ${new Date(data.timestamp).toLocaleTimeString()}`;
     statusEl.className = 'ok';
   } catch {
     statusEl.textContent = 'Unreachable';
@@ -16,5 +16,5 @@ async function ping() {
   }
 }
 
-document.getElementById('ping-btn').addEventListener('click', ping);
-ping();
+document.getElementById('ping-btn').addEventListener('click', checkStatus);
+checkStatus();
