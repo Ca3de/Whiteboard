@@ -1,4 +1,4 @@
-app = 'whiteboard'
+app = 'ca3de-whiteboard'
 primary_region = 'ord'
 
 [build]
