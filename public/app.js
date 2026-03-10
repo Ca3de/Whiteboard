@@ -1,8 +1,9 @@
 /**
- * Whiteboard — Boxes (process paths), drawing, sticky notes, text
+ * Whiteboard — Boxes (process paths), tags (lockable), drawing, notes, text
  *
- * Boxes are the primary object: named containers representing process paths.
- * Each box name must be unique. All state syncs in real-time via WebSocket.
+ * Tags: predefined list in a sidebar palette. Drag onto board to place.
+ * Only one instance of each tag on the board. While dragging, tag is locked —
+ * no other session can interact with it until released.
  */
 
 // --- EventBus ---
@@ -23,12 +24,17 @@ const EventBus = (() => {
 // --- State ---
 
 const State = {
-  boxes: [],     // { id, name, x, y, w, h, color }
-  strokes: [],   // { id, points: [{x,y}], color, width }
-  notes: [],     // { id, x, y, text, color }
-  texts: [],     // { id, x, y, text, color }
+  sessionId: null,
+  availableTags: [],  // { id, label }
+  placedTags: [],     // { id, label, x, y, lockedBy }
+  boxes: [],
+  strokes: [],
+  notes: [],
+  texts: [],
 
   load(data) {
+    this.availableTags = data.availableTags || [];
+    this.placedTags = data.placedTags || [];
     this.boxes = data.boxes || [];
     this.strokes = data.strokes || [];
     this.notes = data.notes || [];
@@ -36,11 +42,22 @@ const State = {
   },
 
   clear() {
+    this.placedTags = [];
     this.boxes = [];
     this.strokes = [];
     this.notes = [];
     this.texts = [];
   },
+
+  // Tags
+  isTagPlaced(tagId) { return this.placedTags.some(t => t.id === tagId); },
+  addPlacedTag(tag) { this.placedTags.push(tag); },
+  updatePlacedTag(id, changes) {
+    const t = this.placedTags.find(t => t.id === id);
+    if (t) Object.assign(t, changes);
+    return t;
+  },
+  removePlacedTag(id) { this.placedTags = this.placedTags.filter(t => t.id !== id); },
 
   // Boxes
   addBox(b) { this.boxes.push(b); },
@@ -95,7 +112,6 @@ const Connection = (() => {
       reconnectDelay = 1000;
       EventBus.emit('connection:change', true);
 
-      // Client-side keepalive — send ping every 25s to prevent Fly proxy timeout
       clearInterval(pingInterval);
       pingInterval = setInterval(() => {
         if (ws && ws.readyState === WebSocket.OPEN) {
@@ -108,7 +124,6 @@ const Connection = (() => {
       console.log('[WS] Disconnected, code:', e.code, 'reason:', e.reason);
       clearInterval(pingInterval);
       EventBus.emit('connection:change', false);
-      // Exponential backoff: 1s, 2s, 4s, max 10s
       setTimeout(connect, reconnectDelay);
       reconnectDelay = Math.min(reconnectDelay * 2, 10000);
     };
@@ -119,7 +134,7 @@ const Connection = (() => {
 
     ws.onmessage = (e) => {
       const msg = JSON.parse(e.data);
-      if (msg.type === 'pong') return; // ignore keepalive responses
+      if (msg.type === 'pong') return;
       console.log('[WS] Received:', msg.type);
       EventBus.emit(`ws:${msg.type}`, msg);
     };
@@ -190,6 +205,14 @@ let dragOffset = { x: 0, y: 0 };
 let resizeTarget = null;
 let resizeStart = { x: 0, y: 0, w: 0, h: 0 };
 
+// Tag dragging from palette
+let paletteDragTag = null; // { id, label, el (ghost) }
+let paletteDragPos = { x: 0, y: 0 };
+
+function getInitials(name) {
+  return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+}
+
 const BOX_COLORS = ['box-red', 'box-blue', 'box-green', 'box-orange', 'box-purple', 'box-teal'];
 const NOTE_COLORS = ['note-yellow', 'note-pink', 'note-blue', 'note-green', 'note-purple'];
 let boxColorIndex = 0;
@@ -226,8 +249,148 @@ document.getElementById('stroke-width').addEventListener('change', (e) => {
 document.getElementById('clear-btn').addEventListener('click', () => {
   State.clear();
   renderObjects();
+  renderTagPalette();
   redraw();
   Connection.send({ type: 'clear' });
+});
+
+// --- Tag panel toggle ---
+
+document.getElementById('tags-toggle-btn').addEventListener('click', () => {
+  const panel = document.getElementById('tag-panel');
+  const btn = document.getElementById('tags-toggle-btn');
+  panel.classList.toggle('hidden');
+  btn.classList.toggle('active');
+  // Resize canvas after panel animation
+  setTimeout(resizeCanvas, 220);
+});
+
+document.getElementById('tag-panel-close').addEventListener('click', () => {
+  document.getElementById('tag-panel').classList.add('hidden');
+  document.getElementById('tags-toggle-btn').classList.remove('active');
+  setTimeout(resizeCanvas, 220);
+});
+
+// --- Tag palette rendering ---
+
+function renderTagPalette() {
+  const palette = document.getElementById('tag-palette');
+  palette.innerHTML = '';
+
+  State.availableTags.forEach(tag => {
+    const el = document.createElement('div');
+    const isPlaced = State.isTagPlaced(tag.id);
+    el.className = 'palette-tag' + (isPlaced ? ' placed' : '');
+    el.innerHTML = `<span class="badge-icon">${getInitials(tag.label)}</span><span>${escapeHtml(tag.label)}</span>`;
+    el.dataset.tagId = tag.id;
+
+    if (!isPlaced) {
+      el.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        startPaletteDrag(tag, e);
+      });
+    }
+
+    palette.appendChild(el);
+  });
+}
+
+// --- Palette drag (drag tag from sidebar onto board) ---
+
+function startPaletteDrag(tag, e) {
+  // Create a ghost element that follows the mouse
+  const ghost = document.createElement('div');
+  ghost.className = 'board-tag';
+  ghost.innerHTML = `<span class="badge-icon">${getInitials(tag.label)}</span><span>${escapeHtml(tag.label)}</span>`;
+  ghost.style.position = 'fixed';
+  ghost.style.left = e.clientX - 30 + 'px';
+  ghost.style.top = e.clientY - 12 + 'px';
+  ghost.style.zIndex = '5000';
+  ghost.style.pointerEvents = 'none';
+  document.body.appendChild(ghost);
+
+  paletteDragTag = { id: tag.id, label: tag.label, el: ghost };
+}
+
+document.addEventListener('mousemove', (e) => {
+  // Palette drag ghost
+  if (paletteDragTag) {
+    paletteDragTag.el.style.left = e.clientX - 30 + 'px';
+    paletteDragTag.el.style.top = e.clientY - 12 + 'px';
+    return;
+  }
+
+  // Drag existing objects
+  if (dragTarget) {
+    const x = e.clientX - dragOffset.x;
+    const y = e.clientY - dragOffset.y;
+    dragTarget.el.style.left = x + 'px';
+    dragTarget.el.style.top = y + 'px';
+
+    if (dragTarget.type === 'box') State.updateBox(dragTarget.id, { x, y });
+    else if (dragTarget.type === 'note') State.updateNote(dragTarget.id, { x, y });
+    else if (dragTarget.type === 'text') State.updateText(dragTarget.id, { x, y });
+    else if (dragTarget.type === 'tag') {
+      State.updatePlacedTag(dragTarget.id, { x, y });
+      Connection.send({ type: 'tag:move', tagId: dragTarget.id, x, y });
+    }
+  }
+
+  // Resize
+  if (resizeTarget) {
+    const dx = e.clientX - resizeStart.x;
+    const dy = e.clientY - resizeStart.y;
+    const w = Math.max(200, resizeStart.w + dx);
+    const h = Math.max(150, resizeStart.h + dy);
+    resizeTarget.el.style.width = w + 'px';
+    resizeTarget.el.style.height = h + 'px';
+    State.updateBox(resizeTarget.id, { w, h });
+  }
+});
+
+document.addEventListener('mouseup', (e) => {
+  // Palette drag: drop tag onto board
+  if (paletteDragTag) {
+    const container = document.getElementById('canvas-container');
+    const rect = container.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    // Only place if dropped inside the canvas area
+    if (e.clientX >= rect.left && e.clientX <= rect.right &&
+        e.clientY >= rect.top && e.clientY <= rect.bottom) {
+      Connection.send({ type: 'tag:place', tagId: paletteDragTag.id, x, y });
+    }
+
+    paletteDragTag.el.remove();
+    paletteDragTag = null;
+    return;
+  }
+
+  // Regular drag end
+  if (dragTarget) {
+    dragTarget.el.classList.remove('dragging');
+    if (dragTarget.type === 'box') {
+      const b = State.boxes.find(b => b.id === dragTarget.id);
+      if (b) Connection.send({ type: 'box:move', id: b.id, x: b.x, y: b.y });
+    } else if (dragTarget.type === 'note') {
+      const n = State.notes.find(n => n.id === dragTarget.id);
+      if (n) Connection.send({ type: 'note:move', id: n.id, x: n.x, y: n.y });
+    } else if (dragTarget.type === 'text') {
+      const t = State.texts.find(t => t.id === dragTarget.id);
+      if (t) Connection.send({ type: 'text:move', id: t.id, x: t.x, y: t.y });
+    } else if (dragTarget.type === 'tag') {
+      // Unlock the tag on release
+      Connection.send({ type: 'tag:unlock', tagId: dragTarget.id });
+    }
+    dragTarget = null;
+  }
+
+  if (resizeTarget) {
+    const b = State.boxes.find(b => b.id === resizeTarget.id);
+    if (b) Connection.send({ type: 'box:resize', id: b.id, w: b.w, h: b.h });
+    resizeTarget = null;
+  }
 });
 
 // --- Box dialog ---
@@ -255,22 +418,13 @@ document.getElementById('box-create-btn').addEventListener('click', () => {
   const error = document.getElementById('box-name-error');
   const name = input.value.trim();
 
-  if (!name) {
-    error.textContent = 'Name is required';
-    return;
-  }
-  if (State.isNameTaken(name)) {
-    error.textContent = 'A box with this name already exists';
-    return;
-  }
+  if (!name) { error.textContent = 'Name is required'; return; }
+  if (State.isNameTaken(name)) { error.textContent = 'A box with this name already exists'; return; }
 
   const box = {
-    id: uid(),
-    name,
-    x: pendingBoxPosition.x,
-    y: pendingBoxPosition.y,
-    w: 280,
-    h: 200,
+    id: uid(), name,
+    x: pendingBoxPosition.x, y: pendingBoxPosition.y,
+    w: 280, h: 200,
     color: BOX_COLORS[boxColorIndex++ % BOX_COLORS.length]
   };
 
@@ -279,13 +433,10 @@ document.getElementById('box-create-btn').addEventListener('click', () => {
 });
 
 document.getElementById('box-cancel-btn').addEventListener('click', hideBoxDialog);
-
 document.getElementById('box-name-input').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') document.getElementById('box-create-btn').click();
   if (e.key === 'Escape') hideBoxDialog();
 });
-
-// Prevent clicks on dialog overlay from creating objects
 document.getElementById('box-dialog').addEventListener('mousedown', (e) => {
   if (e.target === e.currentTarget) hideBoxDialog();
 });
@@ -318,26 +469,18 @@ document.getElementById('rename-save-btn').addEventListener('click', () => {
   const error = document.getElementById('rename-error');
   const name = input.value.trim();
 
-  if (!name) {
-    error.textContent = 'Name is required';
-    return;
-  }
-  if (State.isNameTaken(name, renameBoxId)) {
-    error.textContent = 'A box with this name already exists';
-    return;
-  }
+  if (!name) { error.textContent = 'Name is required'; return; }
+  if (State.isNameTaken(name, renameBoxId)) { error.textContent = 'A box with this name already exists'; return; }
 
   Connection.send({ type: 'box:rename', id: renameBoxId, name });
   hideRenameDialog();
 });
 
 document.getElementById('rename-cancel-btn').addEventListener('click', hideRenameDialog);
-
 document.getElementById('rename-input').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') document.getElementById('rename-save-btn').click();
   if (e.key === 'Escape') hideRenameDialog();
 });
-
 document.getElementById('rename-dialog').addEventListener('mousedown', (e) => {
   if (e.target === e.currentTarget) hideRenameDialog();
 });
@@ -352,10 +495,8 @@ canvas.addEventListener('mousedown', (e) => {
   if (currentTool === 'draw') {
     isDrawing = true;
     currentStroke = {
-      id: uid(),
-      points: [{ x, y }],
-      color: currentColor,
-      width: currentStrokeWidth
+      id: uid(), points: [{ x, y }],
+      color: currentColor, width: currentStrokeWidth
     };
   } else if (currentTool === 'box') {
     showBoxDialog(x, y);
@@ -372,7 +513,6 @@ canvas.addEventListener('mousemove', (e) => {
   currentStroke.points.push({ x: e.clientX - rect.left, y: e.clientY - rect.top });
   redraw();
 
-  // Draw in-progress stroke
   ctx.beginPath();
   ctx.strokeStyle = currentStroke.color;
   ctx.lineWidth = currentStroke.width;
@@ -402,8 +542,7 @@ canvas.addEventListener('mouseleave', finishStroke);
 
 function createNote(x, y) {
   const note = {
-    id: uid(), x, y,
-    text: '',
+    id: uid(), x, y, text: '',
     color: NOTE_COLORS[Math.floor(Math.random() * NOTE_COLORS.length)]
   };
   State.addNote(note);
@@ -428,7 +567,46 @@ function renderObjects() {
   const layer = document.getElementById('objects-layer');
   layer.innerHTML = '';
 
-  // Boxes (process paths)
+  // Tags on the board
+  State.placedTags.forEach(tag => {
+    const el = document.createElement('div');
+    const isLockedByOther = tag.lockedBy && tag.lockedBy !== State.sessionId;
+    const isLockedByMe = tag.lockedBy === State.sessionId;
+
+    el.className = 'board-tag';
+    if (isLockedByOther) el.classList.add('locked');
+    if (isLockedByMe) el.classList.add('locked-by-me');
+    el.dataset.tagId = tag.id;
+    el.style.left = tag.x + 'px';
+    el.style.top = tag.y + 'px';
+    el.innerHTML = `<span class="badge-icon">${getInitials(tag.label)}</span><span>${escapeHtml(tag.label)}</span><button class="tag-remove-btn">&times;</button>`;
+
+    // Drag — only if not locked by someone else
+    if (!isLockedByOther) {
+      el.addEventListener('mousedown', (e) => {
+        if (e.target.classList.contains('tag-remove-btn')) return;
+        e.preventDefault();
+        // Lock the tag first
+        Connection.send({ type: 'tag:lock', tagId: tag.id });
+        dragTarget = { type: 'tag', id: tag.id, el };
+        dragOffset.x = e.clientX - tag.x;
+        dragOffset.y = e.clientY - tag.y;
+        el.classList.add('locked-by-me');
+      });
+    }
+
+    // Remove from board (return to palette)
+    if (!isLockedByOther) {
+      el.querySelector('.tag-remove-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        Connection.send({ type: 'tag:remove', tagId: tag.id });
+      });
+    }
+
+    layer.appendChild(el);
+  });
+
+  // Boxes
   State.boxes.forEach(box => {
     const el = document.createElement('div');
     el.className = `process-box ${box.color}`;
@@ -449,7 +627,6 @@ function renderObjects() {
       <div class="box-resize-handle"></div>
     `;
 
-    // Drag via header
     el.querySelector('.box-header').addEventListener('mousedown', (e) => {
       if (e.target.closest('.box-actions')) return;
       dragTarget = { type: 'box', id: box.id, el };
@@ -459,7 +636,6 @@ function renderObjects() {
       e.preventDefault();
     });
 
-    // Resize handle
     el.querySelector('.box-resize-handle').addEventListener('mousedown', (e) => {
       resizeTarget = { id: box.id, el };
       resizeStart = { x: e.clientX, y: e.clientY, w: box.w, h: box.h };
@@ -467,13 +643,11 @@ function renderObjects() {
       e.stopPropagation();
     });
 
-    // Rename
     el.querySelector('.box-rename-btn').addEventListener('click', (e) => {
       e.stopPropagation();
       showRenameDialog(box.id);
     });
 
-    // Delete
     el.querySelector('.box-delete-btn').addEventListener('click', (e) => {
       e.stopPropagation();
       State.removeBox(box.id);
@@ -556,56 +730,6 @@ function renderObjects() {
   });
 }
 
-// --- Global drag / resize handling ---
-
-document.addEventListener('mousemove', (e) => {
-  // Drag
-  if (dragTarget) {
-    const x = e.clientX - dragOffset.x;
-    const y = e.clientY - dragOffset.y;
-    dragTarget.el.style.left = x + 'px';
-    dragTarget.el.style.top = y + 'px';
-
-    if (dragTarget.type === 'box') State.updateBox(dragTarget.id, { x, y });
-    else if (dragTarget.type === 'note') State.updateNote(dragTarget.id, { x, y });
-    else if (dragTarget.type === 'text') State.updateText(dragTarget.id, { x, y });
-  }
-
-  // Resize
-  if (resizeTarget) {
-    const dx = e.clientX - resizeStart.x;
-    const dy = e.clientY - resizeStart.y;
-    const w = Math.max(200, resizeStart.w + dx);
-    const h = Math.max(150, resizeStart.h + dy);
-    resizeTarget.el.style.width = w + 'px';
-    resizeTarget.el.style.height = h + 'px';
-    State.updateBox(resizeTarget.id, { w, h });
-  }
-});
-
-document.addEventListener('mouseup', () => {
-  if (dragTarget) {
-    dragTarget.el.classList.remove('dragging');
-    if (dragTarget.type === 'box') {
-      const b = State.boxes.find(b => b.id === dragTarget.id);
-      if (b) Connection.send({ type: 'box:move', id: b.id, x: b.x, y: b.y });
-    } else if (dragTarget.type === 'note') {
-      const n = State.notes.find(n => n.id === dragTarget.id);
-      if (n) Connection.send({ type: 'note:move', id: n.id, x: n.x, y: n.y });
-    } else if (dragTarget.type === 'text') {
-      const t = State.texts.find(t => t.id === dragTarget.id);
-      if (t) Connection.send({ type: 'text:move', id: t.id, x: t.x, y: t.y });
-    }
-    dragTarget = null;
-  }
-
-  if (resizeTarget) {
-    const b = State.boxes.find(b => b.id === resizeTarget.id);
-    if (b) Connection.send({ type: 'box:resize', id: b.id, w: b.w, h: b.h });
-    resizeTarget = null;
-  }
-});
-
 function escapeHtml(str) {
   const el = document.createElement('span');
   el.textContent = str;
@@ -615,41 +739,64 @@ function escapeHtml(str) {
 // --- WebSocket events ---
 
 EventBus.on('ws:init', (msg) => {
+  State.sessionId = msg.sessionId;
   State.load(msg.state);
+  console.log('[WS] Session:', State.sessionId, '| Tags:', State.availableTags.length, '| Placed:', State.placedTags.length);
   redraw();
   renderObjects();
+  renderTagPalette();
+});
+
+// Tags
+EventBus.on('ws:tag:placed', (msg) => {
+  if (!State.isTagPlaced(msg.tag.id)) {
+    State.addPlacedTag(msg.tag);
+  }
+  renderObjects();
+  renderTagPalette();
+});
+
+EventBus.on('ws:tag:locked', (msg) => {
+  State.updatePlacedTag(msg.id, { lockedBy: msg.lockedBy });
+  renderObjects();
+});
+
+EventBus.on('ws:tag:lock-denied', (msg) => {
+  console.warn('[WS] Lock denied for tag:', msg.id);
+  // Cancel current drag if we were trying to drag this tag
+  if (dragTarget && dragTarget.type === 'tag' && dragTarget.id === msg.id) {
+    dragTarget = null;
+    renderObjects();
+  }
+});
+
+EventBus.on('ws:tag:moved', (msg) => {
+  State.updatePlacedTag(msg.id, { x: msg.x, y: msg.y });
+  renderObjects();
+});
+
+EventBus.on('ws:tag:unlocked', (msg) => {
+  State.updatePlacedTag(msg.id, { lockedBy: null, x: msg.x, y: msg.y });
+  renderObjects();
+});
+
+EventBus.on('ws:tag:removed', (msg) => {
+  State.removePlacedTag(msg.id);
+  renderObjects();
+  renderTagPalette();
 });
 
 // Boxes
 EventBus.on('ws:box:added', (msg) => {
-  if (!State.boxes.find(b => b.id === msg.box.id)) {
-    State.addBox(msg.box);
-  }
+  if (!State.boxes.find(b => b.id === msg.box.id)) State.addBox(msg.box);
   renderObjects();
 });
-
-EventBus.on('ws:box:moved', (msg) => {
-  State.updateBox(msg.id, { x: msg.x, y: msg.y });
-  renderObjects();
-});
-
-EventBus.on('ws:box:resized', (msg) => {
-  State.updateBox(msg.id, { w: msg.w, h: msg.h });
-  renderObjects();
-});
-
-EventBus.on('ws:box:renamed', (msg) => {
-  State.updateBox(msg.id, { name: msg.name });
-  renderObjects();
-});
-
-EventBus.on('ws:box:deleted', (msg) => {
-  State.removeBox(msg.id);
-  renderObjects();
-});
+EventBus.on('ws:box:moved', (msg) => { State.updateBox(msg.id, { x: msg.x, y: msg.y }); renderObjects(); });
+EventBus.on('ws:box:resized', (msg) => { State.updateBox(msg.id, { w: msg.w, h: msg.h }); renderObjects(); });
+EventBus.on('ws:box:renamed', (msg) => { State.updateBox(msg.id, { name: msg.name }); renderObjects(); });
+EventBus.on('ws:box:deleted', (msg) => { State.removeBox(msg.id); renderObjects(); });
 
 EventBus.on('ws:box:error', (msg) => {
-  // Show error in whichever dialog is open
   const boxErr = document.getElementById('box-name-error');
   const renameErr = document.getElementById('rename-error');
   if (boxErr && document.getElementById('box-dialog').style.display !== 'none') {
@@ -660,10 +807,7 @@ EventBus.on('ws:box:error', (msg) => {
 });
 
 // Strokes
-EventBus.on('ws:stroke:added', (msg) => {
-  State.addStroke(msg.stroke);
-  redraw();
-});
+EventBus.on('ws:stroke:added', (msg) => { State.addStroke(msg.stroke); redraw(); });
 
 // Notes
 EventBus.on('ws:note:added', (msg) => { State.addNote(msg.note); renderObjects(); });
@@ -682,6 +826,7 @@ EventBus.on('ws:cleared', () => {
   State.clear();
   redraw();
   renderObjects();
+  renderTagPalette();
 });
 
 EventBus.on('connection:change', (connected) => {

@@ -1,15 +1,37 @@
 /**
  * Board — core domain model for whiteboard
  *
- * Manages boxes (process paths), strokes, sticky notes, and text labels.
+ * Manages boxes (process paths), tags (lockable, single-instance),
+ * strokes, sticky notes, and text labels.
  */
 class Board {
   constructor({ onEvent }) {
-    this._boxes = [];    // { id, name, x, y, w, h, color }
+    this._boxes = [];
     this._strokes = [];
     this._notes = [];
     this._texts = [];
     this._onEvent = onEvent || (() => {});
+
+    // Tags (badges): predefined list of associate/person badges.
+    // Each can be placed on the board or remain in the palette.
+    // Placed tags have x, y coordinates. Locked tags have a lockedBy session id.
+    this._availableTags = [
+      { id: 'badge-alice', label: 'Alice Johnson' },
+      { id: 'badge-bob', label: 'Bob Martinez' },
+      { id: 'badge-carol', label: 'Carol Chen' },
+      { id: 'badge-dave', label: 'Dave Wilson' },
+      { id: 'badge-eve', label: 'Eve Nakamura' },
+      { id: 'badge-frank', label: 'Frank Osei' },
+      { id: 'badge-grace', label: 'Grace Kim' },
+      { id: 'badge-hank', label: 'Hank Patel' },
+      { id: 'badge-iris', label: 'Iris Johansson' },
+      { id: 'badge-jack', label: 'Jack Rivera' },
+      { id: 'badge-kate', label: 'Kate Murphy' },
+      { id: 'badge-leo', label: 'Leo Andersen' }
+    ];
+
+    // Placed tags: { id, label, x, y, lockedBy: null | sessionId }
+    this._placedTags = [];
   }
 
   get state() {
@@ -17,8 +39,75 @@ class Board {
       boxes: [...this._boxes],
       strokes: [...this._strokes],
       notes: [...this._notes],
-      texts: [...this._texts]
+      texts: [...this._texts],
+      availableTags: this._availableTags.map(t => ({ ...t })),
+      placedTags: this._placedTags.map(t => ({ ...t }))
     };
+  }
+
+  // --- Tags ---
+
+  isTagPlaced(tagId) {
+    return this._placedTags.some(t => t.id === tagId);
+  }
+
+  placeTag(tagId, x, y) {
+    if (this.isTagPlaced(tagId)) return null;
+    const def = this._availableTags.find(t => t.id === tagId);
+    if (!def) return null;
+    const placed = { id: tagId, label: def.label, x, y, lockedBy: null };
+    this._placedTags.push(placed);
+    this._onEvent('tag:placed', { tag: placed });
+    return placed;
+  }
+
+  removeTagFromBoard(tagId) {
+    const tag = this._placedTags.find(t => t.id === tagId);
+    if (!tag) return false;
+    if (tag.lockedBy) return false; // can't remove a locked tag
+    this._placedTags = this._placedTags.filter(t => t.id !== tagId);
+    this._onEvent('tag:removed', { id: tagId });
+    return true;
+  }
+
+  lockTag(tagId, sessionId) {
+    const tag = this._placedTags.find(t => t.id === tagId);
+    if (!tag) return null;
+    if (tag.lockedBy && tag.lockedBy !== sessionId) return null; // already locked by someone else
+    tag.lockedBy = sessionId;
+    this._onEvent('tag:locked', { id: tagId, lockedBy: sessionId });
+    return tag;
+  }
+
+  unlockTag(tagId, sessionId) {
+    const tag = this._placedTags.find(t => t.id === tagId);
+    if (!tag) return null;
+    if (tag.lockedBy !== sessionId) return null; // not locked by this session
+    tag.lockedBy = null;
+    this._onEvent('tag:unlocked', { id: tagId });
+    return tag;
+  }
+
+  moveTag(tagId, x, y, sessionId) {
+    const tag = this._placedTags.find(t => t.id === tagId);
+    if (!tag) return null;
+    if (tag.lockedBy && tag.lockedBy !== sessionId) return null;
+    tag.x = x;
+    tag.y = y;
+    this._onEvent('tag:moved', { id: tagId, x, y });
+    return tag;
+  }
+
+  // Release all locks held by a session (called on disconnect)
+  releaseSessionLocks(sessionId) {
+    const released = [];
+    this._placedTags.forEach(tag => {
+      if (tag.lockedBy === sessionId) {
+        tag.lockedBy = null;
+        released.push(tag.id);
+      }
+    });
+    return released;
   }
 
   // --- Boxes (process paths) ---
@@ -43,13 +132,8 @@ class Board {
     return box;
   }
 
-  moveBox(id, x, y) {
-    return this.updateBox(id, { x, y });
-  }
-
-  resizeBox(id, w, h) {
-    return this.updateBox(id, { w, h });
-  }
+  moveBox(id, x, y) { return this.updateBox(id, { x, y }); }
+  resizeBox(id, w, h) { return this.updateBox(id, { w, h }); }
 
   deleteBox(id) {
     const before = this._boxes.length;
@@ -130,6 +214,7 @@ class Board {
     this._strokes = [];
     this._notes = [];
     this._texts = [];
+    this._placedTags = [];
     this._onEvent('cleared', {});
   }
 }
