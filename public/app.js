@@ -26,7 +26,7 @@ const EventBus = (() => {
 const State = {
   sessionId: null,
   availableTags: [],  // { id, label }
-  placedTags: [],     // { id, label, x, y, lockedBy }
+  placedTags: [],     // { id, label, boxId, lockedBy }
   boxes: [],
   strokes: [],
   notes: [],
@@ -295,10 +295,23 @@ function renderTagPalette() {
   });
 }
 
-// --- Palette drag (drag tag from sidebar onto board) ---
+// --- Hit-test: find which box the cursor is over ---
+
+function findBoxAt(clientX, clientY) {
+  const boxEls = document.querySelectorAll('.process-box');
+  for (const el of boxEls) {
+    const rect = el.getBoundingClientRect();
+    if (clientX >= rect.left && clientX <= rect.right &&
+        clientY >= rect.top && clientY <= rect.bottom) {
+      return el.dataset.boxId;
+    }
+  }
+  return null;
+}
+
+// --- Palette drag (drag badge from sidebar into a box) ---
 
 function startPaletteDrag(tag, e) {
-  // Create a ghost element that follows the mouse
   const ghost = document.createElement('div');
   ghost.className = 'board-tag';
   ghost.innerHTML = `<span class="badge-icon">${getInitials(tag.label)}</span><span>${escapeHtml(tag.label)}</span>`;
@@ -317,10 +330,32 @@ document.addEventListener('mousemove', (e) => {
   if (paletteDragTag) {
     paletteDragTag.el.style.left = e.clientX - 30 + 'px';
     paletteDragTag.el.style.top = e.clientY - 12 + 'px';
+
+    // Highlight box under cursor
+    document.querySelectorAll('.process-box').forEach(el => el.classList.remove('drop-target'));
+    const boxId = findBoxAt(e.clientX, e.clientY);
+    if (boxId) {
+      const boxEl = document.querySelector(`[data-box-id="${boxId}"]`);
+      if (boxEl) boxEl.classList.add('drop-target');
+    }
     return;
   }
 
-  // Drag existing objects
+  // Tag drag ghost (moving existing badge between boxes)
+  if (dragTarget && dragTarget.type === 'tag') {
+    dragTarget.el.style.left = e.clientX - 30 + 'px';
+    dragTarget.el.style.top = e.clientY - 12 + 'px';
+
+    document.querySelectorAll('.process-box').forEach(el => el.classList.remove('drop-target'));
+    const boxId = findBoxAt(e.clientX, e.clientY);
+    if (boxId) {
+      const boxEl = document.querySelector(`[data-box-id="${boxId}"]`);
+      if (boxEl) boxEl.classList.add('drop-target');
+    }
+    return;
+  }
+
+  // Drag existing objects (boxes, notes, text)
   if (dragTarget) {
     const x = e.clientX - dragOffset.x;
     const y = e.clientY - dragOffset.y;
@@ -330,10 +365,6 @@ document.addEventListener('mousemove', (e) => {
     if (dragTarget.type === 'box') State.updateBox(dragTarget.id, { x, y });
     else if (dragTarget.type === 'note') State.updateNote(dragTarget.id, { x, y });
     else if (dragTarget.type === 'text') State.updateText(dragTarget.id, { x, y });
-    else if (dragTarget.type === 'tag') {
-      State.updatePlacedTag(dragTarget.id, { x, y });
-      Connection.send({ type: 'tag:move', tagId: dragTarget.id, x, y });
-    }
   }
 
   // Resize
@@ -349,18 +380,16 @@ document.addEventListener('mousemove', (e) => {
 });
 
 document.addEventListener('mouseup', (e) => {
-  // Palette drag: drop tag onto board
-  if (paletteDragTag) {
-    const container = document.getElementById('canvas-container');
-    const rect = container.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+  // Clear drop highlights
+  document.querySelectorAll('.process-box').forEach(el => el.classList.remove('drop-target'));
 
-    // Only place if dropped inside the canvas area
-    if (e.clientX >= rect.left && e.clientX <= rect.right &&
-        e.clientY >= rect.top && e.clientY <= rect.bottom) {
-      Connection.send({ type: 'tag:place', tagId: paletteDragTag.id, x, y });
+  // Palette drag: drop badge into a box
+  if (paletteDragTag) {
+    const boxId = findBoxAt(e.clientX, e.clientY);
+    if (boxId) {
+      Connection.send({ type: 'tag:place', tagId: paletteDragTag.id, boxId });
     }
+    // If not dropped on a box, it just goes back to palette (no-op)
 
     paletteDragTag.el.remove();
     paletteDragTag = null;
@@ -380,10 +409,17 @@ document.addEventListener('mouseup', (e) => {
       const t = State.texts.find(t => t.id === dragTarget.id);
       if (t) Connection.send({ type: 'text:move', id: t.id, x: t.x, y: t.y });
     } else if (dragTarget.type === 'tag') {
-      // Unlock the tag on release
-      Connection.send({ type: 'tag:unlock', tagId: dragTarget.id });
+      // Drop badge into whatever box is under cursor, or keep in original box
+      const boxId = findBoxAt(e.clientX, e.clientY);
+      const tag = State.placedTags.find(t => t.id === dragTarget.id);
+      const targetBox = boxId || (tag ? tag.boxId : null);
+      Connection.send({ type: 'tag:unlock', tagId: dragTarget.id, boxId: targetBox });
+
+      // Clean up the floating ghost
+      dragTarget.el.remove();
     }
     dragTarget = null;
+    renderObjects();
   }
 
   if (resizeTarget) {
@@ -567,46 +603,7 @@ function renderObjects() {
   const layer = document.getElementById('objects-layer');
   layer.innerHTML = '';
 
-  // Tags on the board
-  State.placedTags.forEach(tag => {
-    const el = document.createElement('div');
-    const isLockedByOther = tag.lockedBy && tag.lockedBy !== State.sessionId;
-    const isLockedByMe = tag.lockedBy === State.sessionId;
-
-    el.className = 'board-tag';
-    if (isLockedByOther) el.classList.add('locked');
-    if (isLockedByMe) el.classList.add('locked-by-me');
-    el.dataset.tagId = tag.id;
-    el.style.left = tag.x + 'px';
-    el.style.top = tag.y + 'px';
-    el.innerHTML = `<span class="badge-icon">${getInitials(tag.label)}</span><span>${escapeHtml(tag.label)}</span><button class="tag-remove-btn">&times;</button>`;
-
-    // Drag — only if not locked by someone else
-    if (!isLockedByOther) {
-      el.addEventListener('mousedown', (e) => {
-        if (e.target.classList.contains('tag-remove-btn')) return;
-        e.preventDefault();
-        // Lock the tag first
-        Connection.send({ type: 'tag:lock', tagId: tag.id });
-        dragTarget = { type: 'tag', id: tag.id, el };
-        dragOffset.x = e.clientX - tag.x;
-        dragOffset.y = e.clientY - tag.y;
-        el.classList.add('locked-by-me');
-      });
-    }
-
-    // Remove from board (return to palette)
-    if (!isLockedByOther) {
-      el.querySelector('.tag-remove-btn').addEventListener('click', (e) => {
-        e.stopPropagation();
-        Connection.send({ type: 'tag:remove', tagId: tag.id });
-      });
-    }
-
-    layer.appendChild(el);
-  });
-
-  // Boxes
+  // Boxes (with badges rendered inside)
   State.boxes.forEach(box => {
     const el = document.createElement('div');
     el.className = `process-box ${box.color}`;
@@ -626,6 +623,49 @@ function renderObjects() {
       <div class="box-body"></div>
       <div class="box-resize-handle"></div>
     `;
+
+    // Render badges inside this box
+    const boxBody = el.querySelector('.box-body');
+    const boxTags = State.placedTags.filter(t => t.boxId === box.id);
+    boxTags.forEach(tag => {
+      const tagEl = document.createElement('div');
+      const isLockedByOther = tag.lockedBy && tag.lockedBy !== State.sessionId;
+      const isLockedByMe = tag.lockedBy === State.sessionId;
+
+      tagEl.className = 'board-tag';
+      if (isLockedByOther) tagEl.classList.add('locked');
+      if (isLockedByMe) tagEl.classList.add('locked-by-me');
+      tagEl.dataset.tagId = tag.id;
+      tagEl.innerHTML = `<span class="badge-icon">${getInitials(tag.label)}</span><span>${escapeHtml(tag.label)}</span><button class="tag-remove-btn">&times;</button>`;
+
+      if (!isLockedByOther) {
+        tagEl.addEventListener('mousedown', (e) => {
+          if (e.target.classList.contains('tag-remove-btn')) return;
+          e.preventDefault();
+          Connection.send({ type: 'tag:lock', tagId: tag.id });
+
+          // Create a floating ghost for dragging between boxes
+          const ghost = document.createElement('div');
+          ghost.className = 'board-tag locked-by-me';
+          ghost.innerHTML = `<span class="badge-icon">${getInitials(tag.label)}</span><span>${escapeHtml(tag.label)}</span>`;
+          ghost.style.position = 'fixed';
+          ghost.style.left = e.clientX - 30 + 'px';
+          ghost.style.top = e.clientY - 12 + 'px';
+          ghost.style.zIndex = '5000';
+          ghost.style.pointerEvents = 'none';
+          document.body.appendChild(ghost);
+
+          dragTarget = { type: 'tag', id: tag.id, el: ghost, originalBoxId: tag.boxId };
+        });
+
+        tagEl.querySelector('.tag-remove-btn').addEventListener('click', (e) => {
+          e.stopPropagation();
+          Connection.send({ type: 'tag:remove', tagId: tag.id });
+        });
+      }
+
+      boxBody.appendChild(tagEl);
+    });
 
     el.querySelector('.box-header').addEventListener('mousedown', (e) => {
       if (e.target.closest('.box-actions')) return;
@@ -771,12 +811,14 @@ EventBus.on('ws:tag:lock-denied', (msg) => {
 });
 
 EventBus.on('ws:tag:moved', (msg) => {
-  State.updatePlacedTag(msg.id, { x: msg.x, y: msg.y });
+  State.updatePlacedTag(msg.id, { boxId: msg.boxId });
   renderObjects();
 });
 
 EventBus.on('ws:tag:unlocked', (msg) => {
-  State.updatePlacedTag(msg.id, { lockedBy: null, x: msg.x, y: msg.y });
+  const changes = { lockedBy: null };
+  if (msg.boxId) changes.boxId = msg.boxId;
+  State.updatePlacedTag(msg.id, changes);
   renderObjects();
 });
 

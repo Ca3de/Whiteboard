@@ -30,7 +30,7 @@ class Board {
       { id: 'badge-leo', label: 'Leo Andersen' }
     ];
 
-    // Placed tags: { id, label, x, y, lockedBy: null | sessionId }
+    // Placed tags: { id, label, boxId, lockedBy: null | sessionId }
     this._placedTags = [];
   }
 
@@ -45,17 +45,18 @@ class Board {
     };
   }
 
-  // --- Tags ---
+  // --- Tags (badges) ---
 
   isTagPlaced(tagId) {
     return this._placedTags.some(t => t.id === tagId);
   }
 
-  placeTag(tagId, x, y) {
+  placeTag(tagId, boxId) {
     if (this.isTagPlaced(tagId)) return null;
+    if (!this._boxes.find(b => b.id === boxId)) return null;
     const def = this._availableTags.find(t => t.id === tagId);
     if (!def) return null;
-    const placed = { id: tagId, label: def.label, x, y, lockedBy: null };
+    const placed = { id: tagId, label: def.label, boxId, lockedBy: null };
     this._placedTags.push(placed);
     this._onEvent('tag:placed', { tag: placed });
     return placed;
@@ -64,7 +65,7 @@ class Board {
   removeTagFromBoard(tagId) {
     const tag = this._placedTags.find(t => t.id === tagId);
     if (!tag) return false;
-    if (tag.lockedBy) return false; // can't remove a locked tag
+    if (tag.lockedBy) return false;
     this._placedTags = this._placedTags.filter(t => t.id !== tagId);
     this._onEvent('tag:removed', { id: tagId });
     return true;
@@ -73,28 +74,32 @@ class Board {
   lockTag(tagId, sessionId) {
     const tag = this._placedTags.find(t => t.id === tagId);
     if (!tag) return null;
-    if (tag.lockedBy && tag.lockedBy !== sessionId) return null; // already locked by someone else
+    if (tag.lockedBy && tag.lockedBy !== sessionId) return null;
     tag.lockedBy = sessionId;
     this._onEvent('tag:locked', { id: tagId, lockedBy: sessionId });
     return tag;
   }
 
-  unlockTag(tagId, sessionId) {
+  unlockTag(tagId, sessionId, boxId) {
     const tag = this._placedTags.find(t => t.id === tagId);
     if (!tag) return null;
-    if (tag.lockedBy !== sessionId) return null; // not locked by this session
+    if (tag.lockedBy !== sessionId) return null;
+    // Move to new box if provided and valid
+    if (boxId && this._boxes.find(b => b.id === boxId)) {
+      tag.boxId = boxId;
+    }
     tag.lockedBy = null;
-    this._onEvent('tag:unlocked', { id: tagId });
+    this._onEvent('tag:unlocked', { id: tagId, boxId: tag.boxId });
     return tag;
   }
 
-  moveTag(tagId, x, y, sessionId) {
+  moveTag(tagId, boxId, sessionId) {
     const tag = this._placedTags.find(t => t.id === tagId);
     if (!tag) return null;
     if (tag.lockedBy && tag.lockedBy !== sessionId) return null;
-    tag.x = x;
-    tag.y = y;
-    this._onEvent('tag:moved', { id: tagId, x, y });
+    if (!this._boxes.find(b => b.id === boxId)) return null;
+    tag.boxId = boxId;
+    this._onEvent('tag:moved', { id: tagId, boxId });
     return tag;
   }
 

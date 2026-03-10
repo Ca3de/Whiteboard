@@ -107,9 +107,9 @@ async function start() {
       console.log(`[WS] ${ws.sessionId}: ${msg.type}`);
 
       switch (msg.type) {
-        // --- Tags ---
+        // --- Tags (badges) ---
         case 'tag:place': {
-          const tag = board.placeTag(msg.tagId, msg.x, msg.y);
+          const tag = board.placeTag(msg.tagId, msg.boxId);
           if (tag) {
             broadcastAll({ type: 'tag:placed', tag });
           }
@@ -125,16 +125,16 @@ async function start() {
           break;
         }
         case 'tag:move': {
-          const tag = board.moveTag(msg.tagId, msg.x, msg.y, ws.sessionId);
+          const tag = board.moveTag(msg.tagId, msg.boxId, ws.sessionId);
           if (tag) {
-            broadcast({ type: 'tag:moved', id: msg.tagId, x: msg.x, y: msg.y }, ws);
+            broadcastAll({ type: 'tag:moved', id: msg.tagId, boxId: msg.boxId });
           }
           break;
         }
         case 'tag:unlock': {
-          const tag = board.unlockTag(msg.tagId, ws.sessionId);
+          const tag = board.unlockTag(msg.tagId, ws.sessionId, msg.boxId);
           if (tag) {
-            broadcastAll({ type: 'tag:unlocked', id: msg.tagId, x: tag.x, y: tag.y });
+            broadcastAll({ type: 'tag:unlocked', id: msg.tagId, boxId: tag.boxId });
           }
           break;
         }
@@ -256,7 +256,7 @@ async function start() {
       const released = board.releaseSessionLocks(ws.sessionId);
       released.forEach(tagId => {
         const tag = board.state.placedTags.find(t => t.id === tagId);
-        broadcastAll({ type: 'tag:unlocked', id: tagId, x: tag ? tag.x : 0, y: tag ? tag.y : 0 });
+        broadcastAll({ type: 'tag:unlocked', id: tagId, boxId: tag ? tag.boxId : null });
       });
       console.log(`[WS] Client ${ws.sessionId} disconnected (released ${released.length} locks, remaining: ${wss.clients.size})`);
     });
