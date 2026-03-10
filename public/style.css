@@ -393,7 +393,7 @@ body {
   flex-wrap: wrap;
   align-content: flex-start;
   gap: 4px;
-  overflow-y: auto;
+  overflow-y: visible;
 }
 
 .process-box.drop-target {

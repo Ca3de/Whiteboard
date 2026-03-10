@@ -611,7 +611,7 @@ function renderObjects() {
     el.style.left = box.x + 'px';
     el.style.top = box.y + 'px';
     el.style.width = box.w + 'px';
-    el.style.height = box.h + 'px';
+    el.style.minHeight = box.h + 'px';
     el.innerHTML = `
       <div class="box-header">
         <span class="box-name">${escapeHtml(box.name)}</span>
