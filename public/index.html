@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Whiteboard</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>Whiteboard</h1>
+    <div class="controls">
+      <input type="text" id="tag-input" placeholder="New tag name..." maxlength="40">
+      <button id="add-tag-btn">+ Add Tag</button>
+    </div>
+    <div id="connection-status" class="status connected">Connected</div>
+  </header>
+
+  <main id="board">
+    <!-- Path columns are rendered by JS -->
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
