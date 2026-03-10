@@ -5,6 +5,7 @@
   "description": "Syncs employee permissions from FCLM to the Whiteboard",
   "permissions": ["alarms", "storage"],
   "host_permissions": [
+    "http://localhost/*",
     "https://*.fly.dev/*",
     "https://fclm-portal.amazon.com/*"
   ],

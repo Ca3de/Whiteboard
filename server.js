@@ -72,17 +72,22 @@ async function start() {
   });
 
   app.post('/api/employees', (req, res) => {
-    const result = board.addOrUpdateEmployee(req.body);
-    if (!result) {
-      return res.status(400).json({ error: 'Invalid employee data' });
+    try {
+      const result = board.addOrUpdateEmployee(req.body);
+      if (!result) {
+        return res.status(400).json({ error: 'Invalid employee data' });
+      }
+      // Broadcast updated employee list and tags to all WS clients
+      broadcastAll({
+        type: 'employees:updated',
+        employees: board.getEmployees(),
+        availableTags: board.state.availableTags
+      });
+      res.json({ ok: true, employee: result });
+    } catch (err) {
+      console.error('[Server] POST /api/employees error:', err);
+      res.status(500).json({ error: err.message });
     }
-    // Broadcast updated employee list and tags to all WS clients
-    broadcastAll({
-      type: 'employees:updated',
-      employees: board.getEmployees(),
-      availableTags: board.state.availableTags
-    });
-    res.json({ ok: true, employee: result });
   });
 
   app.delete('/api/employees/:id', (req, res) => {

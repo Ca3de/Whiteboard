@@ -8,7 +8,7 @@
  *   - Find an FCLM tab to run fetches through
  */
 
-const DEFAULT_WHITEBOARD_URL = 'https://whiteboard.fly.dev';
+const DEFAULT_WHITEBOARD_URL = 'http://localhost:3000';
 const SYNC_ALARM_NAME = 'whiteboard-sync';
 const SYNC_INTERVAL_MINUTES = 300; // 5 hours
 
