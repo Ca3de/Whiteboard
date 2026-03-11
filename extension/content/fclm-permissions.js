@@ -79,7 +79,7 @@
   function extractEmployeeInfo(doc, fallbackLogin) {
     const info = { login: fallbackLogin };
 
-    // Name from fold-control: "Oladeji,Israel (oladeisr)"
+    // Strategy 1: Name from fold-control: "Oladeji,Israel (oladeisr)"
     const titleSpan = doc.querySelector('.empDetailCard .fold-control');
     if (titleSpan) {
       const match = titleSpan.textContent.trim().match(/^(.+?)\s*\((\w+)\)$/);
@@ -91,19 +91,52 @@
       }
     }
 
-    // Parse dl.list-side-by-side fields
-    const dlElements = doc.querySelectorAll('.empDetailCard dl.list-side-by-side');
+    // Strategy 2: Try broader selectors for the employee name
+    if (!info.name) {
+      // Try h2/h3/h4 inside empDetailCard
+      const heading = doc.querySelector('.empDetailCard h2, .empDetailCard h3, .empDetailCard h4');
+      if (heading) {
+        const match = heading.textContent.trim().match(/^(.+?)\s*\((\w+)\)$/);
+        if (match) {
+          const rawName = match[1];
+          const parts = rawName.split(',').map(s => s.trim());
+          info.name = parts.length === 2 ? `${parts[1]} ${parts[0]}` : rawName;
+          info.login = match[2];
+        }
+      }
+    }
+
+    // Strategy 3: Look for "Last,First (login)" pattern anywhere in empDetailCard
+    if (!info.name) {
+      const card = doc.querySelector('.empDetailCard');
+      if (card) {
+        const match = card.textContent.match(/([A-Z][a-z]+(?:\s[A-Z][a-z]+)*)\s*,\s*([A-Z][a-z]+(?:\s[A-Z][a-z]+)*)\s*\((\w+)\)/);
+        if (match) {
+          info.name = `${match[2]} ${match[1]}`;
+          info.login = match[3];
+        }
+      }
+    }
+
+    // Parse dl.list-side-by-side fields (badge, emplId, shift, and Name if present)
+    const dlElements = doc.querySelectorAll('.empDetailCard dl.list-side-by-side, .empDetailCard dl');
     dlElements.forEach(dl => {
       const dts = dl.querySelectorAll('dt');
       const dds = dl.querySelectorAll('dd');
       for (let i = 0; i < dts.length && i < dds.length; i++) {
-        const key = dts[i].textContent.trim();
+        const key = dts[i].textContent.trim().toLowerCase();
         const val = dds[i].textContent.trim();
-        if (key === 'Login') info.login = info.login || val;
-        if (key === 'Empl ID') info.emplId = val;
-        if (key === 'Badge') info.badge = val;
-        if (key === 'Shift') info.shift = val;
-        if (key === 'Location') info.location = val;
+        if (!val) continue;
+        if (key === 'login') info.login = info.login || val;
+        if (key === 'empl id' || key === 'employee id') info.emplId = val;
+        if (key === 'badge') info.badge = val;
+        if (key === 'shift') info.shift = val;
+        if (key === 'location') info.location = val;
+        if (key === 'name' || key === 'employee name') {
+          // Could be "Last,First" or "First Last"
+          const parts = val.split(',').map(s => s.trim());
+          info.name = parts.length === 2 ? `${parts[1]} ${parts[0]}` : val;
+        }
       }
     });
 
@@ -112,6 +145,11 @@
     if (photo && !info.emplId) {
       const m = (photo.getAttribute('src') || '').match(/employeeid=(\d+)/i);
       if (m) info.emplId = m[1];
+    }
+
+    if (!info.name) {
+      console.warn(`[Whiteboard] Could not extract name for ${fallbackLogin} — HTML preview:`,
+        doc.querySelector('.empDetailCard')?.innerHTML?.substring(0, 300) || '(no empDetailCard found)');
     }
 
     return info;
@@ -202,7 +240,8 @@
         });
 
         results.synced++;
-        console.log(`[Whiteboard] Synced ${login} (${i + 1}/${roster.length})`);
+        const dispName = data.employee.name || login;
+        console.log(`[Whiteboard] Synced ${login} → ${dispName} (${i + 1}/${roster.length})`);
       } catch (err) {
         results.failed++;
         results.errors.push({ login, error: err.message });
