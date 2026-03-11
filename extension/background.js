@@ -10,7 +10,7 @@
 
 const DEFAULT_WHITEBOARD_URL = 'https://ca3de-whiteboard.fly.dev';
 const SYNC_ALARM_NAME = 'whiteboard-sync';
-const SYNC_INTERVAL_MINUTES = 300; // 5 hours
+const SYNC_INTERVAL_MINUTES = 60; // 1 hour
 
 // Default roster — seeded on first install
 const DEFAULT_ROSTER = [

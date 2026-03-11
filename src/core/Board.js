@@ -7,6 +7,22 @@
 
 const LEVEL_RANK = { 'none': 0, 'beginner': 1, 'intermediate': 2, 'expert': 3, 'admin': 4, 'permitted': 1 };
 
+/**
+ * Parse permission level strings from FCLM which may include a numeric
+ * prefix like "0NONE", "1BEGINNER", "2INTERMEDIATE", "3EXPERT".
+ * Returns the normalized level name and numeric rank.
+ */
+function parseLevel(raw) {
+  const s = raw.trim().toLowerCase();
+  // Direct match first
+  if (LEVEL_RANK[s] !== undefined) return { level: raw, rank: LEVEL_RANK[s] };
+  // Strip leading digits: "1beginner" → "beginner", "0none" → "none"
+  const stripped = s.replace(/^\d+/, '');
+  if (LEVEL_RANK[stripped] !== undefined) return { level: stripped, rank: LEVEL_RANK[stripped] };
+  // Unknown
+  return { level: raw, rank: 0 };
+}
+
 class Board {
   constructor({ onEvent }) {
     this._boxes = [];
@@ -131,12 +147,12 @@ class Board {
       return { allowed: true, level: 'unknown', reason: 'no permission data loaded' };
     }
 
-    const rank = LEVEL_RANK[level.toLowerCase()] || 0;
-    const allowed = rank >= 1; // Beginner or higher
+    const parsed = parseLevel(level);
+    const allowed = parsed.rank >= 1; // Beginner or higher
     return {
       allowed,
-      level,
-      reason: allowed ? null : `${emp.name || emp.id} has ${level} for ${subprocessName}`
+      level: parsed.level,
+      reason: allowed ? null : `${emp.name || emp.id} has ${parsed.level} for ${subprocessName}`
     };
   }
 

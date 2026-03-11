@@ -14,7 +14,7 @@
   'use strict';
 
   const WAREHOUSE_ID = 'IND8';
-  const BATCH_DELAY_MS = 800; // delay between fetches to avoid hammering FCLM
+  const BATCH_DELAY_MS = 300; // delay between fetches
 
   // --- Init ---
 

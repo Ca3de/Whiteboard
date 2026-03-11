@@ -71,19 +71,27 @@ async function start() {
     res.json(board.getEmployees());
   });
 
-  app.post('/api/employees', (req, res) => {
-    try {
-      console.log('[Server] POST /api/employees body:', JSON.stringify(req.body).slice(0, 200));
-      const result = board.addOrUpdateEmployee(req.body);
-      if (!result) {
-        return res.status(400).json({ error: 'Invalid employee data' });
-      }
-      // Broadcast updated employee list and tags to all WS clients
+  // Debounce employee broadcasts to avoid flooding WS clients during bulk sync
+  let employeeBroadcastTimer = null;
+  function debouncedEmployeeBroadcast() {
+    if (employeeBroadcastTimer) clearTimeout(employeeBroadcastTimer);
+    employeeBroadcastTimer = setTimeout(() => {
       broadcastAll({
         type: 'employees:updated',
         employees: board.getEmployees(),
         availableTags: board.state.availableTags
       });
+    }, 500);
+  }
+
+  app.post('/api/employees', (req, res) => {
+    try {
+      const result = board.addOrUpdateEmployee(req.body);
+      if (!result) {
+        return res.status(400).json({ error: 'Invalid employee data' });
+      }
+      // Debounced broadcast — avoids serializing full list on every sync POST
+      debouncedEmployeeBroadcast();
       res.json({ ok: true, employee: result });
     } catch (err) {
       console.error('[Server] POST /api/employees error:', err);
