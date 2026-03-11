@@ -41,19 +41,20 @@ chrome.runtime.onInstalled.addListener(() => {
     }
   });
 
-  // Set up the 5-hour sync alarm
+  // Set up the hourly sync alarm
   chrome.alarms.create(SYNC_ALARM_NAME, {
-    delayInMinutes: 1,            // first sync 1 min after install
     periodInMinutes: SYNC_INTERVAL_MINUTES
   });
-  console.log('[Whiteboard BG] Sync alarm created (every 5 hours)');
+  console.log(`[Whiteboard BG] Sync alarm created (every ${SYNC_INTERVAL_MINUTES} min)`);
+
+  // Trigger an immediate sync after a short delay to let FCLM tabs register
+  setTimeout(() => triggerSync(), 5000);
 });
 
 // Also create alarm on service worker startup (in case it was killed)
 chrome.alarms.get(SYNC_ALARM_NAME, (alarm) => {
   if (!alarm) {
     chrome.alarms.create(SYNC_ALARM_NAME, {
-      delayInMinutes: 1,
       periodInMinutes: SYNC_INTERVAL_MINUTES
     });
   }
@@ -78,6 +79,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (sender.tab) {
       fclmTabIds.add(sender.tab.id);
       console.log('[Whiteboard BG] FCLM tab registered:', sender.tab.id);
+      // Auto-sync if we haven't synced yet
+      chrome.storage.local.get('lastSyncTime', (data) => {
+        if (!data.lastSyncTime) {
+          console.log('[Whiteboard BG] First FCLM tab ready — triggering initial sync');
+          triggerSync();
+        }
+      });
     }
     sendResponse({ ok: true });
     return false;
