@@ -2,11 +2,45 @@ const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
 const path = require('path');
+const fs = require('fs');
 const crypto = require('crypto');
 
 const PluginManager = require('./src/core/PluginManager');
 const Board = require('./src/core/Board');
 const LoggerPlugin = require('./src/plugins/LoggerPlugin');
+
+// --- Employee persistence ---
+const DATA_DIR = path.join(__dirname, 'data');
+const EMPLOYEES_FILE = path.join(DATA_DIR, 'employees.json');
+
+function loadPersistedEmployees() {
+  try {
+    if (fs.existsSync(EMPLOYEES_FILE)) {
+      const raw = fs.readFileSync(EMPLOYEES_FILE, 'utf8');
+      const employees = JSON.parse(raw);
+      console.log(`[Persist] Loaded ${employees.length} employees from disk`);
+      return employees;
+    }
+  } catch (err) {
+    console.error('[Persist] Failed to load employees:', err.message);
+  }
+  return null;
+}
+
+let persistTimer = null;
+function debouncedPersistEmployees(board) {
+  if (persistTimer) clearTimeout(persistTimer);
+  persistTimer = setTimeout(() => {
+    try {
+      if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+      const employees = board.getEmployees();
+      fs.writeFileSync(EMPLOYEES_FILE, JSON.stringify(employees, null, 2));
+      console.log(`[Persist] Saved ${employees.length} employees to disk`);
+    } catch (err) {
+      console.error('[Persist] Failed to save employees:', err.message);
+    }
+  }, 1000);
+}
 
 // --- Bootstrap ---
 
@@ -41,16 +75,43 @@ async function start() {
   plugins.register(LoggerPlugin);
   await plugins.initAll({ board });
 
-  // Seed employees from roster
-  AA_ROSTER.forEach(login => {
-    board.addOrUpdateEmployee({
-      employee: { login, name: login },
-      permissions: {},
-      source: 'roster',
-      timestamp: Date.now()
+  // Load persisted employees first, then fill in any missing roster entries
+  const persisted = loadPersistedEmployees();
+  if (persisted && persisted.length > 0) {
+    // Restore from disk — preserves names, permissions, everything
+    persisted.forEach(emp => {
+      board.addOrUpdateEmployee({
+        employee: { login: emp.login, name: emp.name, badge: emp.badge, emplId: emp.emplId, shift: emp.shift },
+        permissions: emp.permissions || {},
+        source: emp.source || 'persisted',
+        timestamp: emp.lastSynced || Date.now()
+      });
     });
-  });
-  console.log(`[Seed] ${AA_ROSTER.length} AAs loaded into badge palette`);
+    console.log(`[Seed] Restored ${persisted.length} employees from disk`);
+    // Add any new roster entries not in persisted data
+    const knownIds = new Set(persisted.map(e => e.id || e.login));
+    AA_ROSTER.forEach(login => {
+      if (!knownIds.has(login)) {
+        board.addOrUpdateEmployee({
+          employee: { login, name: login },
+          permissions: {},
+          source: 'roster',
+          timestamp: Date.now()
+        });
+      }
+    });
+  } else {
+    // First run — seed from roster
+    AA_ROSTER.forEach(login => {
+      board.addOrUpdateEmployee({
+        employee: { login, name: login },
+        permissions: {},
+        source: 'roster',
+        timestamp: Date.now()
+      });
+    });
+    console.log(`[Seed] ${AA_ROSTER.length} AAs loaded into badge palette (first run)`);
+  }
 
   const app = express();
   const server = http.createServer(app);
@@ -86,12 +147,18 @@ async function start() {
 
   app.post('/api/employees', (req, res) => {
     try {
+      const login = req.body?.employee?.login || '?';
+      const name = req.body?.employee?.name || '(none)';
+      const permCount = req.body?.permissions ? Object.keys(req.body.permissions).length : 0;
+      console.log(`[API] POST employee: ${login} name="${name}" perms=${permCount}`);
       const result = board.addOrUpdateEmployee(req.body);
       if (!result) {
         return res.status(400).json({ error: 'Invalid employee data' });
       }
+      console.log(`[API] Stored: id=${result.id} name="${result.name}" perms=${Object.keys(result.permissions || {}).length}`);
       // Debounced broadcast — avoids serializing full list on every sync POST
       debouncedEmployeeBroadcast();
+      debouncedPersistEmployees(board);
       res.json({ ok: true, employee: result });
     } catch (err) {
       console.error('[Server] POST /api/employees error:', err);
@@ -111,6 +178,7 @@ async function start() {
       availableTags: board.state.availableTags,
       placedTags: board.state.placedTags
     });
+    debouncedPersistEmployees(board);
     res.json({ ok: true });
   });
 
