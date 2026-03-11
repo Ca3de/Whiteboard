@@ -171,7 +171,7 @@ class Board {
     return this._placedTags.some(t => t.id === tagId);
   }
 
-  placeTag(tagId, boxId) {
+  placeTag(tagId, boxId, subBox) {
     if (this.isTagPlaced(tagId)) return null;
     const box = this._boxes.find(b => b.id === boxId);
     if (!box) return null;
@@ -186,7 +186,7 @@ class Board {
       }
     }
 
-    const placed = { id: tagId, label: def.label, employeeId: def.employeeId, boxId, lockedBy: null };
+    const placed = { id: tagId, label: def.label, employeeId: def.employeeId, boxId, subBox: subBox || null, lockedBy: null };
     this._placedTags.push(placed);
     this._onEvent('tag:placed', { tag: placed });
     return placed;
@@ -210,7 +210,7 @@ class Board {
     return tag;
   }
 
-  unlockTag(tagId, sessionId, boxId) {
+  unlockTag(tagId, sessionId, boxId, subBox) {
     const tag = this._placedTags.find(t => t.id === tagId);
     if (!tag) return null;
     if (tag.lockedBy !== sessionId) return null;
@@ -238,8 +238,10 @@ class Board {
     if (boxId && this._boxes.find(b => b.id === boxId)) {
       tag.boxId = boxId;
     }
+    // Update sub-box assignment
+    tag.subBox = subBox || null;
     tag.lockedBy = null;
-    this._onEvent('tag:unlocked', { id: tagId, boxId: tag.boxId });
+    this._onEvent('tag:unlocked', { id: tagId, boxId: tag.boxId, subBox: tag.subBox });
     return tag;
   }
 
