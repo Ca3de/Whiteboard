@@ -7,11 +7,23 @@
 
 const LEVEL_RANK = { 'none': 0, 'beginner': 1, 'intermediate': 2, 'expert': 3, 'admin': 4, 'permitted': 1 };
 
-/**
- * Parse permission level strings from FCLM which may include a numeric
- * prefix like "0NONE", "1BEGINNER", "2INTERMEDIATE", "3EXPERT".
- * Returns the normalized level name and numeric rank.
- */
+// Subprocess compatibility: each group shares permissions.
+// If an employee has permission for any subprocess in a group,
+// they can work in any box whose name matches that group.
+const SUBPROCESS_GROUPS = [
+  ['pick', 'pick rf', 'v-returns pick'],
+];
+
+function areSubprocessesCompatible(boxName, permKey) {
+  const a = boxName.toLowerCase();
+  const b = permKey.toLowerCase();
+  for (const group of SUBPROCESS_GROUPS) {
+    const boxMatch = group.some(g => a === g || a.startsWith(g + ' ') || a.endsWith(' ' + g));
+    const permMatch = group.some(g => b === g || b.startsWith(g + ' ') || b.endsWith(' ' + g));
+    if (boxMatch && permMatch) return true;
+  }
+  return false;
+}
 function parseLevel(raw) {
   const s = raw.trim().toLowerCase();
   // Direct match first
@@ -150,6 +162,19 @@ class Board {
           if (parsed.rank >= 1) {
             level = val;
             bestLen = keyLower.length;
+          }
+        }
+      }
+    }
+
+    // Subprocess group match: e.g. "Pick RF" permission covers "V-Returns Pick" box
+    if (level === null) {
+      for (const [key, val] of Object.entries(emp.permissions)) {
+        if (areSubprocessesCompatible(subprocessName, key)) {
+          const parsed = parseLevel(val);
+          if (parsed.rank >= 1) {
+            level = val;
+            break;
           }
         }
       }
