@@ -46,9 +46,6 @@ chrome.runtime.onInstalled.addListener(() => {
     periodInMinutes: SYNC_INTERVAL_MINUTES
   });
   console.log(`[Whiteboard BG] Sync alarm created (every ${SYNC_INTERVAL_MINUTES} min)`);
-
-  // Trigger an immediate sync after a short delay to let FCLM tabs register
-  setTimeout(() => triggerSync(), 5000);
 });
 
 // Also create alarm on service worker startup (in case it was killed)
@@ -231,9 +228,22 @@ async function findFclmTab() {
 }
 
 /**
- * Trigger a full roster sync.
+ * Trigger a full roster sync. Guarded against concurrent runs.
  */
+let syncInProgress = false;
 async function triggerSync() {
+  if (syncInProgress) {
+    console.log('[Whiteboard BG] Sync already in progress, skipping');
+    return { error: 'sync_in_progress' };
+  }
+  syncInProgress = true;
+  try {
+    return await _doSync();
+  } finally {
+    syncInProgress = false;
+  }
+}
+async function _doSync() {
   const tabId = await findFclmTab();
   if (!tabId) {
     console.warn('[Whiteboard BG] No FCLM tab found — cannot sync. Open any FCLM page first.');
