@@ -1207,7 +1207,16 @@ function escapeHtml(str) {
 EventBus.on('ws:init', (msg) => {
   State.sessionId = msg.sessionId;
   State.load(msg.state);
-  console.log('[WS] Session:', State.sessionId, '| Tags:', State.availableTags.length, '| Placed:', State.placedTags.length);
+  console.log('[WS] Session:', State.sessionId, '| Employees:', State.employees.length, '| Tags:', State.availableTags.length, '| Placed:', State.placedTags.length, '| Boxes:', State.boxes.length);
+  // Debug: check for inconsistencies
+  const orphanedTags = State.placedTags.filter(t => !State.boxes.some(b => b.id === t.boxId));
+  if (orphanedTags.length > 0) {
+    console.warn('[WS] Orphaned placed tags (box missing):', orphanedTags.map(t => `${t.label} → box:${t.boxId}`));
+  }
+  const missingEmps = State.placedTags.filter(t => t.employeeId && !State.getEmployee(t.employeeId));
+  if (missingEmps.length > 0) {
+    console.warn('[WS] Placed tags with missing employee:', missingEmps.map(t => `${t.label} emp:${t.employeeId}`));
+  }
   redraw();
   renderObjects();
   renderTagPalette();
