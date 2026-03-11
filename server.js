@@ -9,9 +9,11 @@ const PluginManager = require('./src/core/PluginManager');
 const Board = require('./src/core/Board');
 const LoggerPlugin = require('./src/plugins/LoggerPlugin');
 
-// --- Employee persistence ---
-const DATA_DIR = path.join(__dirname, 'data');
+// --- Persistence ---
+// Use /data on Fly (volume mount), ./data locally
+const DATA_DIR = fs.existsSync('/data') ? '/data' : path.join(__dirname, 'data');
 const EMPLOYEES_FILE = path.join(DATA_DIR, 'employees.json');
+const BOARD_STATE_FILE = path.join(DATA_DIR, 'board-state.json');
 
 function loadPersistedEmployees() {
   try {
@@ -23,6 +25,20 @@ function loadPersistedEmployees() {
     }
   } catch (err) {
     console.error('[Persist] Failed to load employees:', err.message);
+  }
+  return null;
+}
+
+function loadPersistedBoardState() {
+  try {
+    if (fs.existsSync(BOARD_STATE_FILE)) {
+      const raw = fs.readFileSync(BOARD_STATE_FILE, 'utf8');
+      const state = JSON.parse(raw);
+      console.log(`[Persist] Loaded board state: ${state.boxes?.length || 0} boxes, ${state.placedTags?.length || 0} placed tags`);
+      return state;
+    }
+  } catch (err) {
+    console.error('[Persist] Failed to load board state:', err.message);
   }
   return null;
 }
@@ -42,6 +58,28 @@ function debouncedPersistEmployees(board) {
   }, 1000);
 }
 
+let boardPersistTimer = null;
+function debouncedPersistBoardState(board) {
+  if (boardPersistTimer) clearTimeout(boardPersistTimer);
+  boardPersistTimer = setTimeout(() => {
+    try {
+      if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+      const state = board.state;
+      const toSave = {
+        boxes: state.boxes,
+        placedTags: state.placedTags,
+        strokes: state.strokes,
+        notes: state.notes,
+        texts: state.texts
+      };
+      fs.writeFileSync(BOARD_STATE_FILE, JSON.stringify(toSave));
+      console.log(`[Persist] Saved board state: ${toSave.boxes.length} boxes, ${toSave.placedTags.length} placed tags`);
+    } catch (err) {
+      console.error('[Persist] Failed to save board state:', err.message);
+    }
+  }, 1000);
+}
+
 // --- Bootstrap ---
 
 const plugins = new PluginManager();
@@ -49,6 +87,12 @@ const plugins = new PluginManager();
 const board = new Board({
   onEvent: (eventName, data) => {
     plugins.trigger(eventName, data);
+    // Persist board state on any mutation
+    if (eventName.startsWith('box:') || eventName.startsWith('tag:') ||
+        eventName.startsWith('stroke:') || eventName.startsWith('note:') ||
+        eventName.startsWith('text:') || eventName.startsWith('subbox:')) {
+      debouncedPersistBoardState(board);
+    }
   }
 });
 
@@ -111,6 +155,12 @@ async function start() {
       });
     });
     console.log(`[Seed] ${AA_ROSTER.length} AAs loaded into badge palette (first run)`);
+  }
+
+  // Restore board state (boxes, placed tags, strokes, notes, texts)
+  const savedBoard = loadPersistedBoardState();
+  if (savedBoard) {
+    board.restoreState(savedBoard);
   }
 
   const app = express();

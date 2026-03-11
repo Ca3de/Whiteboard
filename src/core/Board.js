@@ -43,6 +43,17 @@ class Board {
     this._placedTags = [];
   }
 
+  // Restore board state from persisted data (boxes, placedTags, strokes, notes, texts)
+  restoreState(saved) {
+    if (!saved) return;
+    if (saved.boxes) this._boxes = saved.boxes;
+    if (saved.placedTags) this._placedTags = saved.placedTags.map(t => ({ ...t, lockedBy: null }));
+    if (saved.strokes) this._strokes = saved.strokes;
+    if (saved.notes) this._notes = saved.notes;
+    if (saved.texts) this._texts = saved.texts;
+    console.log(`[Board] Restored: ${this._boxes.length} boxes, ${this._placedTags.length} placed tags, ${this._strokes.length} strokes, ${this._notes.length} notes`);
+  }
+
   get state() {
     return {
       boxes: [...this._boxes],
