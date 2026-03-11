@@ -7,20 +7,11 @@
 
 const LEVEL_RANK = { 'none': 0, 'beginner': 1, 'intermediate': 2, 'expert': 3, 'admin': 4, 'permitted': 1 };
 
-// Core subprocess keywords — if a box name and a permission key
-// share one of these keywords, the permission applies.
-const SUBPROCESS_KEYWORDS = ['pick', 'pack', 'stow', 'count', 'replen', 'induct', 'sort', 'ship'];
-
-function areSubprocessesCompatible(boxName, permKey) {
-  const a = boxName.toLowerCase();
-  const b = permKey.toLowerCase();
-  for (const kw of SUBPROCESS_KEYWORDS) {
-    if ((a === kw || a.includes(kw)) && (b === kw || b.includes(kw))) {
-      return true;
-    }
-  }
-  return false;
-}
+// Cross-process permission mappings: box name → additional permission keys that grant access.
+// E.g. "Pick RF" permission also allows placement on "V-Returns Pick" boxes.
+const CROSS_PROCESS_MAP = {
+  'v-returns pick': ['pick rf'],
+};
 function parseLevel(raw) {
   const s = raw.trim().toLowerCase();
   // Direct match first
@@ -143,10 +134,11 @@ class Board {
 
     for (const [key, val] of Object.entries(emp.permissions)) {
       const keyLower = key.toLowerCase();
+      const crossKeys = CROSS_PROCESS_MAP[subLower] || [];
       const isMatch =
         keyLower === subLower ||                          // exact match
         subLower.startsWith(keyLower + ' ') ||            // prefix: "Pick" → "Pick RF"
-        areSubprocessesCompatible(subprocessName, key);   // keyword: "Pick RF" ↔ "V-Returns Pick"
+        crossKeys.includes(keyLower);                     // cross-process: "Pick RF" → "V-Returns Pick"
 
       if (isMatch) {
         const parsed = parseLevel(val);
