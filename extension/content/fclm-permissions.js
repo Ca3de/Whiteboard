@@ -65,10 +65,22 @@
     const employee = extractEmployeeInfo(doc, login);
     const permissions = extractPermissions(doc);
 
+    const permCount = Object.keys(permissions).length;
+    if (permCount === 0) {
+      // Log diagnostic info when no permissions found
+      const hasMainPanel = !!doc.getElementById('main-panel');
+      const tableCount = doc.querySelectorAll('table').length;
+      const hasDropdown = !!doc.querySelector('select[name="newDefaultMenu"]');
+      const titleTag = doc.querySelector('title')?.textContent || '(no title)';
+      console.warn(`[Whiteboard] No permissions found for ${login}:`,
+        `title="${titleTag}", mainPanel=${hasMainPanel}, tables=${tableCount}, dropdown=${hasDropdown}`,
+        `| HTML length=${html.length}`);
+    }
+
     return {
       employee,
       permissions,
-      source: Object.keys(permissions).length > 0 ? 'defaultMenu' : 'none',
+      source: permCount > 0 ? 'fclm' : 'none',
       timestamp: Date.now()
     };
   }
@@ -180,8 +192,16 @@
         let subCol = -1, levelCol = -1;
         headers.forEach((h, i) => {
           if (h.includes('subprocess') || h.includes('function') || h.includes('menu')) subCol = i;
-          if (h.includes('level') || h.includes('permission') || h.includes('current')) levelCol = i;
+          if (h.includes('current level')) levelCol = i;
         });
+        // Fallback: look for "level" or "permission" if "current level" not found
+        if (levelCol < 0) {
+          headers.forEach((h, i) => {
+            if (h.includes('level') || h.includes('permission')) levelCol = i;
+          });
+        }
+
+        console.log(`[Whiteboard] Table headers:`, headers, `subCol=${subCol} levelCol=${levelCol}`);
 
         if (subCol >= 0 && levelCol >= 0) {
           for (let r = 1; r < rows.length; r++) {
@@ -190,6 +210,12 @@
             const subprocess = cells[subCol].textContent.trim();
             const level = cells[levelCol].textContent.trim();
             if (subprocess && level) permissions[subprocess] = level;
+          }
+          // Log first few entries for debugging
+          const entries = Object.entries(permissions);
+          if (entries.length > 0) {
+            console.log(`[Whiteboard] Parsed ${entries.length} permissions, first 3:`,
+              entries.slice(0, 3).map(([k, v]) => `${k}=${v}`).join(', '));
           }
         }
 
