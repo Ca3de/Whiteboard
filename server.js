@@ -167,9 +167,13 @@ async function start() {
   });
 
   // Called by extension after full sync completes — forces immediate broadcast
+  // Rate-limited: only fires if a debounced broadcast is already pending
   app.post('/api/employees/sync-complete', (_req, res) => {
-    // Cancel any pending debounce and broadcast immediately
-    if (employeeBroadcastTimer) clearTimeout(employeeBroadcastTimer);
+    if (!employeeBroadcastTimer) {
+      return res.json({ ok: true, skipped: true, reason: 'no pending broadcast' });
+    }
+    clearTimeout(employeeBroadcastTimer);
+    employeeBroadcastTimer = null;
     const employees = board.getEmployees();
     console.log(`[API] Sync complete — broadcasting ${employees.length} employees`);
     broadcastAll({
