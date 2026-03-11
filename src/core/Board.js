@@ -135,65 +135,41 @@ class Board {
     const emp = this._employees.find(e => e.id === employeeId);
     if (!emp) return { allowed: true, level: 'unknown', reason: 'no employee data' };
 
-    // Find the best permission match for this subprocess.
-    // Try exact match first, then check if any permission key is a prefix
-    // of the box name (e.g. "Pick" matches "Pick RF").
+    // Find the best permission for this subprocess.
+    // Check all matching strategies and pick the highest rank.
     const subLower = subprocessName.toLowerCase();
-    let level = null;
+    let bestRank = -1;
+    let bestLevel = null;
 
-    // Exact match
     for (const [key, val] of Object.entries(emp.permissions)) {
-      if (key.toLowerCase() === subLower) {
-        level = val;
-        break;
-      }
-    }
+      const keyLower = key.toLowerCase();
+      const isMatch =
+        keyLower === subLower ||                          // exact match
+        subLower.startsWith(keyLower + ' ') ||            // prefix: "Pick" → "Pick RF"
+        areSubprocessesCompatible(subprocessName, key);   // keyword: "Pick RF" ↔ "V-Returns Pick"
 
-    // Prefix match: permission "Pick" covers box "Pick RF"
-    if (level === null) {
-      let bestLen = 0;
-      for (const [key, val] of Object.entries(emp.permissions)) {
-        const keyLower = key.toLowerCase();
-        if (subLower.startsWith(keyLower) && keyLower.length > bestLen) {
-          const parsed = parseLevel(val);
-          if (parsed.rank >= 1) {
-            level = val;
-            bestLen = keyLower.length;
-          }
+      if (isMatch) {
+        const parsed = parseLevel(val);
+        if (parsed.rank > bestRank) {
+          bestRank = parsed.rank;
+          bestLevel = parsed.level;
         }
       }
     }
 
-    // Subprocess group match: e.g. "Pick RF" permission covers "V-Returns Pick" box
-    if (level === null) {
-      for (const [key, val] of Object.entries(emp.permissions)) {
-        if (areSubprocessesCompatible(subprocessName, key)) {
-          const parsed = parseLevel(val);
-          if (parsed.rank >= 1) {
-            level = val;
-            break;
-          }
-        }
-      }
-    }
-
-    // If no permission entry exists, check if this is a subprocess we track
-    if (level === null) {
-      // If employee has permissions data but this subprocess isn't listed,
-      // it means they have "None" for it
+    if (bestRank < 0) {
+      // No matching permission found at all
       if (Object.keys(emp.permissions).length > 0) {
         return { allowed: false, level: 'None', reason: `No permission for ${subprocessName}` };
       }
-      // No permissions data at all — allow by default
       return { allowed: true, level: 'unknown', reason: 'no permission data loaded' };
     }
 
-    const parsed = parseLevel(level);
-    const allowed = parsed.rank >= 1; // Beginner or higher
+    const allowed = bestRank >= 1; // Beginner or higher
     return {
       allowed,
-      level: parsed.level,
-      reason: allowed ? null : `${emp.name || emp.id} has ${parsed.level} for ${subprocessName}`
+      level: bestLevel,
+      reason: allowed ? null : `${emp.name || emp.id} has ${bestLevel} for ${subprocessName}`
     };
   }
 
