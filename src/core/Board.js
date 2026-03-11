@@ -126,13 +126,32 @@ class Board {
     const emp = this._employees.find(e => e.id === employeeId);
     if (!emp) return { allowed: true, level: 'unknown', reason: 'no employee data' };
 
-    // Find the permission for this subprocess (case-insensitive match)
+    // Find the best permission match for this subprocess.
+    // Try exact match first, then check if any permission key is a prefix
+    // of the box name (e.g. "Pick" matches "Pick RF").
     const subLower = subprocessName.toLowerCase();
     let level = null;
+
+    // Exact match
     for (const [key, val] of Object.entries(emp.permissions)) {
       if (key.toLowerCase() === subLower) {
         level = val;
         break;
+      }
+    }
+
+    // Prefix match: permission "Pick" covers box "Pick RF"
+    if (level === null) {
+      let bestLen = 0;
+      for (const [key, val] of Object.entries(emp.permissions)) {
+        const keyLower = key.toLowerCase();
+        if (subLower.startsWith(keyLower) && keyLower.length > bestLen) {
+          const parsed = parseLevel(val);
+          if (parsed.rank >= 1) {
+            level = val;
+            bestLen = keyLower.length;
+          }
+        }
       }
     }
 
