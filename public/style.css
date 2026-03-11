@@ -286,6 +286,18 @@ body {
   flex-shrink: 0;
 }
 
+.board-tag .tag-info {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.board-tag .tag-firstname {
+  font-size: 0.65rem;
+  font-weight: 400;
+  opacity: 0.75;
+}
+
 .board-tag:hover {
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
 }
@@ -449,7 +461,8 @@ body {
   flex-wrap: wrap;
   align-content: flex-start;
   gap: 4px;
-  overflow-y: visible;
+  overflow-y: auto;
+  min-height: 0;
 }
 
 .process-box.drop-target {

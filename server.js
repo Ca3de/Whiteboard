@@ -281,8 +281,13 @@ async function start() {
           break;
         }
         case 'box:delete': {
-          if (board.deleteBox(msg.id)) {
-            broadcast({ type: 'box:deleted', id: msg.id }, ws);
+          const delResult = board.deleteBox(msg.id);
+          if (delResult) {
+            broadcastAll({
+              type: 'box:deleted',
+              id: msg.id,
+              returnedTags: delResult.returnedTags
+            });
           }
           break;
         }

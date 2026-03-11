@@ -177,7 +177,7 @@ class Board {
       }
     }
 
-    const placed = { id: tagId, label: def.label, boxId, lockedBy: null };
+    const placed = { id: tagId, label: def.label, employeeId: def.employeeId, boxId, lockedBy: null };
     this._placedTags.push(placed);
     this._onEvent('tag:placed', { tag: placed });
     return placed;
@@ -285,8 +285,11 @@ class Board {
     const before = this._boxes.length;
     this._boxes = this._boxes.filter(b => b.id !== id);
     if (this._boxes.length < before) {
-      this._onEvent('box:deleted', { id });
-      return true;
+      // Return all badges in this box back to the palette
+      const returnedTags = this._placedTags.filter(t => t.boxId === id).map(t => t.id);
+      this._placedTags = this._placedTags.filter(t => t.boxId !== id);
+      this._onEvent('box:deleted', { id, returnedTags });
+      return { deleted: true, returnedTags };
     }
     return false;
   }

@@ -993,7 +993,10 @@ function renderObjects() {
       if (isLockedByOther) tagEl.classList.add('locked');
       if (isLockedByMe) tagEl.classList.add('locked-by-me');
       tagEl.dataset.tagId = tag.id;
-      tagEl.innerHTML = `<span class="badge-icon">${getInitials(tag.label)}</span><span>${escapeHtml(tag.label)}</span><button class="tag-remove-btn">&times;</button>`;
+      const emp = tag.employeeId ? State.getEmployee(tag.employeeId) : null;
+      const login = emp ? emp.login || emp.id : '';
+      const firstName = emp && emp.name ? emp.name.split(' ')[0] : tag.label;
+      tagEl.innerHTML = `<span class="badge-icon">${getInitials(tag.label)}</span><span class="tag-info"><strong>${escapeHtml(login)}</strong><span class="tag-firstname">${escapeHtml(firstName)}</span></span><button class="tag-remove-btn">&times;</button>`;
 
       if (!isLockedByOther) {
         tagEl.addEventListener('mousedown', (e) => {
@@ -1004,7 +1007,7 @@ function renderObjects() {
           // Create a floating ghost for dragging between boxes
           const ghost = document.createElement('div');
           ghost.className = 'board-tag locked-by-me';
-          ghost.innerHTML = `<span class="badge-icon">${getInitials(tag.label)}</span><span>${escapeHtml(tag.label)}</span>`;
+          ghost.innerHTML = `<span class="badge-icon">${getInitials(tag.label)}</span><span class="tag-info"><strong>${escapeHtml(login)}</strong><span class="tag-firstname">${escapeHtml(firstName)}</span></span>`;
           ghost.style.position = 'fixed';
           ghost.style.left = e.clientX - 30 + 'px';
           ghost.style.top = e.clientY - 12 + 'px';
@@ -1048,9 +1051,12 @@ function renderObjects() {
 
     el.querySelector('.box-delete-btn').addEventListener('click', (e) => {
       e.stopPropagation();
+      // Return badges in this box to palette
+      State.placedTags = State.placedTags.filter(t => t.boxId !== box.id);
       State.removeBox(box.id);
       Connection.send({ type: 'box:delete', id: box.id });
       renderObjects();
+      renderTagPalette();
     });
 
     layer.appendChild(el);
@@ -1215,7 +1221,15 @@ EventBus.on('ws:box:added', (msg) => {
 EventBus.on('ws:box:moved', (msg) => { State.updateBox(msg.id, { x: msg.x, y: msg.y }); renderObjects(); });
 EventBus.on('ws:box:resized', (msg) => { State.updateBox(msg.id, { w: msg.w, h: msg.h }); renderObjects(); });
 EventBus.on('ws:box:renamed', (msg) => { State.updateBox(msg.id, { name: msg.name }); renderObjects(); });
-EventBus.on('ws:box:deleted', (msg) => { State.removeBox(msg.id); renderObjects(); });
+EventBus.on('ws:box:deleted', (msg) => {
+  State.removeBox(msg.id);
+  // Return badges to palette
+  if (msg.returnedTags) {
+    State.placedTags = State.placedTags.filter(t => !msg.returnedTags.includes(t.id));
+  }
+  renderObjects();
+  renderTagPalette();
+});
 
 EventBus.on('ws:box:error', (msg) => {
   const boxErr = document.getElementById('box-name-error');
