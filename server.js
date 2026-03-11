@@ -281,7 +281,7 @@ async function start() {
       switch (msg.type) {
         // --- Tags (badges) ---
         case 'tag:place': {
-          const result = board.placeTag(msg.tagId, msg.boxId);
+          const result = board.placeTag(msg.tagId, msg.boxId, msg.subBoxId);
           if (result && result.denied) {
             ws.send(JSON.stringify({
               type: 'tag:denied',
@@ -312,7 +312,7 @@ async function start() {
           break;
         }
         case 'tag:unlock': {
-          const result = board.unlockTag(msg.tagId, ws.sessionId, msg.boxId);
+          const result = board.unlockTag(msg.tagId, ws.sessionId, msg.boxId, msg.subBoxId);
           if (result && result.denied) {
             ws.send(JSON.stringify({
               type: 'tag:move-denied',
@@ -320,9 +320,9 @@ async function start() {
               boxId: result.boxId,
               reason: result.reason
             }));
-            broadcastAll({ type: 'tag:unlocked', id: msg.tagId, boxId: result.boxId });
+            broadcastAll({ type: 'tag:unlocked', id: msg.tagId, boxId: result.boxId, subBoxId: result.subBoxId });
           } else if (result) {
-            broadcastAll({ type: 'tag:unlocked', id: msg.tagId, boxId: result.boxId });
+            broadcastAll({ type: 'tag:unlocked', id: msg.tagId, boxId: result.boxId, subBoxId: result.subBoxId });
           }
           break;
         }
@@ -374,6 +374,23 @@ async function start() {
               id: msg.id,
               returnedTags: delResult.returnedTags
             });
+          }
+          break;
+        }
+
+        // --- Sub-boxes ---
+        case 'subbox:add': {
+          const sb = board.addSubBox(msg.boxId, msg.subBox);
+          if (sb) {
+            broadcastAll({ type: 'subbox:added', boxId: msg.boxId, subBox: sb });
+          } else {
+            ws.send(JSON.stringify({ type: 'subbox:error', message: 'Sub-box name already exists' }));
+          }
+          break;
+        }
+        case 'subbox:delete': {
+          if (board.deleteSubBox(msg.boxId, msg.subBoxId)) {
+            broadcastAll({ type: 'subbox:deleted', boxId: msg.boxId, subBoxId: msg.subBoxId });
           }
           break;
         }
@@ -449,7 +466,7 @@ async function start() {
       const released = board.releaseSessionLocks(ws.sessionId);
       released.forEach(tagId => {
         const tag = board.state.placedTags.find(t => t.id === tagId);
-        broadcastAll({ type: 'tag:unlocked', id: tagId, boxId: tag ? tag.boxId : null });
+        broadcastAll({ type: 'tag:unlocked', id: tagId, boxId: tag ? tag.boxId : null, subBoxId: tag ? tag.subBoxId : null });
       });
       console.log(`[WS] Client ${ws.sessionId} disconnected (released ${released.length} locks, remaining: ${wss.clients.size})`);
     });

@@ -514,6 +514,62 @@ body {
 .box-teal    { border-color: #2dd4bf; color: #2dd4bf; }
 .box-teal .box-header { background: rgba(45, 212, 191, 0.15); }
 
+/* ========== Sub-boxes ========== */
+.process-box .box-body:has(.sub-box) {
+  flex-direction: column;
+  gap: 3px;
+  padding: 4px;
+}
+
+.sub-box {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.03);
+  overflow: hidden;
+}
+
+.sub-box.drop-target {
+  background: rgba(74, 158, 255, 0.12);
+  border-color: rgba(74, 158, 255, 0.5);
+}
+
+.sub-box-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.6rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 2px 8px;
+  opacity: 0.6;
+  background: rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.sub-box-delete-btn {
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  font-size: 0.7rem;
+  padding: 0 2px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.sub-box:hover .sub-box-delete-btn { opacity: 0.6; }
+.sub-box-delete-btn:hover { opacity: 1 !important; }
+
+.sub-box-body {
+  padding: 4px 6px;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 3px;
+  min-height: 28px;
+}
+
 /* ========== Sticky notes ========== */
 .sticky-note {
   position: absolute;

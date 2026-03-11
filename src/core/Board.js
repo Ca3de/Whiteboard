@@ -116,6 +116,11 @@ class Board {
       label: e.name || e.login || e.id,
       employeeId: e.id
     }));
+    // Keep placed tag labels in sync with current employee names
+    this._placedTags.forEach(pt => {
+      const def = this._availableTags.find(t => t.id === pt.id);
+      if (def) pt.label = def.label;
+    });
   }
 
   /**
@@ -171,7 +176,7 @@ class Board {
     return this._placedTags.some(t => t.id === tagId);
   }
 
-  placeTag(tagId, boxId) {
+  placeTag(tagId, boxId, subBoxId) {
     if (this.isTagPlaced(tagId)) return null;
     const box = this._boxes.find(b => b.id === boxId);
     if (!box) return null;
@@ -186,7 +191,7 @@ class Board {
       }
     }
 
-    const placed = { id: tagId, label: def.label, employeeId: def.employeeId, boxId, lockedBy: null };
+    const placed = { id: tagId, label: def.label, employeeId: def.employeeId, boxId, subBoxId: subBoxId || null, lockedBy: null };
     this._placedTags.push(placed);
     this._onEvent('tag:placed', { tag: placed });
     return placed;
@@ -210,7 +215,7 @@ class Board {
     return tag;
   }
 
-  unlockTag(tagId, sessionId, boxId) {
+  unlockTag(tagId, sessionId, boxId, subBoxId) {
     const tag = this._placedTags.find(t => t.id === tagId);
     if (!tag) return null;
     if (tag.lockedBy !== sessionId) return null;
@@ -238,8 +243,10 @@ class Board {
     if (boxId && this._boxes.find(b => b.id === boxId)) {
       tag.boxId = boxId;
     }
+    // Update sub-box assignment
+    if (subBoxId !== undefined) tag.subBoxId = subBoxId || null;
     tag.lockedBy = null;
-    this._onEvent('tag:unlocked', { id: tagId, boxId: tag.boxId });
+    this._onEvent('tag:unlocked', { id: tagId, boxId: tag.boxId, subBoxId: tag.subBoxId });
     return tag;
   }
 
@@ -273,6 +280,7 @@ class Board {
 
   addBox(box) {
     if (this.isBoxNameTaken(box.name)) return null;
+    if (!box.subBoxes) box.subBoxes = [];
     this._boxes.push(box);
     this._onEvent('box:added', { box });
     return box;
@@ -289,6 +297,32 @@ class Board {
 
   moveBox(id, x, y) { return this.updateBox(id, { x, y }); }
   resizeBox(id, w, h) { return this.updateBox(id, { w, h }); }
+
+  addSubBox(boxId, subBox) {
+    const box = this._boxes.find(b => b.id === boxId);
+    if (!box) return null;
+    if (!box.subBoxes) box.subBoxes = [];
+    if (box.subBoxes.some(sb => sb.name.toLowerCase() === subBox.name.toLowerCase())) return null;
+    box.subBoxes.push(subBox);
+    this._onEvent('subbox:added', { boxId, subBox });
+    return subBox;
+  }
+
+  deleteSubBox(boxId, subBoxId) {
+    const box = this._boxes.find(b => b.id === boxId);
+    if (!box || !box.subBoxes) return false;
+    const before = box.subBoxes.length;
+    box.subBoxes = box.subBoxes.filter(sb => sb.id !== subBoxId);
+    if (box.subBoxes.length < before) {
+      // Clear subBoxId from tags in this sub-box (move them to box root)
+      this._placedTags.forEach(t => {
+        if (t.boxId === boxId && t.subBoxId === subBoxId) t.subBoxId = null;
+      });
+      this._onEvent('subbox:deleted', { boxId, subBoxId });
+      return true;
+    }
+    return false;
+  }
 
   deleteBox(id) {
     const before = this._boxes.length;
