@@ -8,7 +8,7 @@
  *   - Find an FCLM tab to run fetches through
  */
 
-const DEFAULT_WHITEBOARD_URL = 'https://whiteboard.fly.dev';
+const DEFAULT_WHITEBOARD_URL = 'https://ca3de-whiteboard.fly.dev';
 const SYNC_ALARM_NAME = 'whiteboard-sync';
 const SYNC_INTERVAL_MINUTES = 300; // 5 hours
 
@@ -287,7 +287,10 @@ async function syncEmployee(data) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data)
   });
-  if (!res.ok) throw new Error(`Server returned ${res.status}`);
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Server returned ${res.status}: ${body}`);
+  }
   return res.json();
 }
 
