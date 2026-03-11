@@ -1195,6 +1195,35 @@ EventBus.on('ws:employees:updated', (msg) => {
   renderTagPalette();
 });
 
+// Re-fetch employees when tab becomes visible (catches any missed WS broadcasts)
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') {
+    fetch('/api/employees')
+      .then(r => r.json())
+      .then(employees => {
+        if (!Array.isArray(employees) || employees.length === 0) return;
+        // Check if any names changed
+        const changed = employees.some(e => {
+          const existing = State.employees.find(s => s.id === e.id);
+          return !existing || existing.name !== e.name;
+        });
+        if (changed) {
+          console.log('[App] Employee data refreshed from server');
+          State.employees = employees;
+          // Rebuild availableTags from fresh employee data
+          State.availableTags = employees.map(e => ({
+            id: `emp-${e.id}`,
+            label: e.name || e.login || e.id,
+            employeeId: e.id
+          }));
+          renderObjects();
+          renderTagPalette();
+        }
+      })
+      .catch(() => {}); // Silently ignore if offline
+  }
+});
+
 EventBus.on('ws:tag:moved', (msg) => {
   State.updatePlacedTag(msg.id, { boxId: msg.boxId });
   renderObjects();

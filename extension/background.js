@@ -283,6 +283,15 @@ async function _doSync() {
         lastSyncTime: Date.now(),
         lastSyncResult: result
       });
+
+      // Tell the server sync is done — triggers immediate broadcast to all WS clients
+      getServerUrl().then(serverUrl => {
+        fetch(`${serverUrl}/api/employees/sync-complete`, { method: 'POST' })
+          .then(r => r.json())
+          .then(r => console.log('[Whiteboard BG] Sync-complete broadcast triggered:', r))
+          .catch(e => console.warn('[Whiteboard BG] Sync-complete broadcast failed:', e.message));
+      });
+
       resolve(result);
     });
   });

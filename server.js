@@ -166,6 +166,20 @@ async function start() {
     }
   });
 
+  // Called by extension after full sync completes — forces immediate broadcast
+  app.post('/api/employees/sync-complete', (_req, res) => {
+    // Cancel any pending debounce and broadcast immediately
+    if (employeeBroadcastTimer) clearTimeout(employeeBroadcastTimer);
+    const employees = board.getEmployees();
+    console.log(`[API] Sync complete — broadcasting ${employees.length} employees`);
+    broadcastAll({
+      type: 'employees:updated',
+      employees,
+      availableTags: board.state.availableTags
+    });
+    res.json({ ok: true, count: employees.length });
+  });
+
   app.delete('/api/employees/:id', (req, res) => {
     const removed = board.removeEmployee(req.params.id);
     if (!removed) {
