@@ -281,7 +281,7 @@ async function start() {
       switch (msg.type) {
         // --- Tags (badges) ---
         case 'tag:place': {
-          const result = board.placeTag(msg.tagId, msg.boxId);
+          const result = board.placeTag(msg.tagId, msg.boxId, msg.subBox);
           if (result && result.denied) {
             ws.send(JSON.stringify({
               type: 'tag:denied',
@@ -312,7 +312,7 @@ async function start() {
           break;
         }
         case 'tag:unlock': {
-          const result = board.unlockTag(msg.tagId, ws.sessionId, msg.boxId);
+          const result = board.unlockTag(msg.tagId, ws.sessionId, msg.boxId, msg.subBox);
           if (result && result.denied) {
             ws.send(JSON.stringify({
               type: 'tag:move-denied',
@@ -320,9 +320,9 @@ async function start() {
               boxId: result.boxId,
               reason: result.reason
             }));
-            broadcastAll({ type: 'tag:unlocked', id: msg.tagId, boxId: result.boxId });
+            broadcastAll({ type: 'tag:unlocked', id: msg.tagId, boxId: result.boxId, subBox: result.subBox });
           } else if (result) {
-            broadcastAll({ type: 'tag:unlocked', id: msg.tagId, boxId: result.boxId });
+            broadcastAll({ type: 'tag:unlocked', id: msg.tagId, boxId: result.boxId, subBox: result.subBox });
           }
           break;
         }
@@ -449,7 +449,7 @@ async function start() {
       const released = board.releaseSessionLocks(ws.sessionId);
       released.forEach(tagId => {
         const tag = board.state.placedTags.find(t => t.id === tagId);
-        broadcastAll({ type: 'tag:unlocked', id: tagId, boxId: tag ? tag.boxId : null });
+        broadcastAll({ type: 'tag:unlocked', id: tagId, boxId: tag ? tag.boxId : null, subBox: tag ? tag.subBox : null });
       });
       console.log(`[WS] Client ${ws.sessionId} disconnected (released ${released.length} locks, remaining: ${wss.clients.size})`);
     });
