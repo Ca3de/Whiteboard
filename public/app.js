@@ -355,18 +355,6 @@ function findBoxAt(clientX, clientY) {
   return null;
 }
 
-function findSubBoxAt(clientX, clientY) {
-  const subEls = document.querySelectorAll('.sub-box');
-  for (const el of subEls) {
-    const rect = el.getBoundingClientRect();
-    if (clientX >= rect.left && clientX <= rect.right &&
-        clientY >= rect.top && clientY <= rect.bottom) {
-      return el.dataset.subBox;
-    }
-  }
-  return null;
-}
-
 // --- Palette drag (drag badge from sidebar into a box) ---
 
 function startPaletteDrag(tag, e) {
@@ -389,18 +377,12 @@ document.addEventListener('mousemove', (e) => {
     paletteDragTag.el.style.left = e.clientX - 30 + 'px';
     paletteDragTag.el.style.top = e.clientY - 12 + 'px';
 
-    // Highlight box/sub-box under cursor
+    // Highlight box under cursor
     document.querySelectorAll('.process-box').forEach(el => el.classList.remove('drop-target'));
-    document.querySelectorAll('.sub-box').forEach(el => el.classList.remove('drop-target'));
     const boxId = findBoxAt(e.clientX, e.clientY);
     if (boxId) {
       const boxEl = document.querySelector(`[data-box-id="${boxId}"]`);
       if (boxEl) boxEl.classList.add('drop-target');
-      const sb = findSubBoxAt(e.clientX, e.clientY);
-      if (sb) {
-        const sbEl = boxEl.querySelector(`.sub-box[data-sub-box="${sb}"]`);
-        if (sbEl) sbEl.classList.add('drop-target');
-      }
     }
     return;
   }
@@ -411,16 +393,10 @@ document.addEventListener('mousemove', (e) => {
     dragTarget.el.style.top = e.clientY - 12 + 'px';
 
     document.querySelectorAll('.process-box').forEach(el => el.classList.remove('drop-target'));
-    document.querySelectorAll('.sub-box').forEach(el => el.classList.remove('drop-target'));
     const boxId = findBoxAt(e.clientX, e.clientY);
     if (boxId) {
       const boxEl = document.querySelector(`[data-box-id="${boxId}"]`);
       if (boxEl) boxEl.classList.add('drop-target');
-      const sb = findSubBoxAt(e.clientX, e.clientY);
-      if (sb) {
-        const sbEl = boxEl.querySelector(`.sub-box[data-sub-box="${sb}"]`);
-        if (sbEl) sbEl.classList.add('drop-target');
-      }
     }
     return;
   }
@@ -463,14 +439,12 @@ document.addEventListener('mousemove', (e) => {
 document.addEventListener('mouseup', (e) => {
   // Clear drop highlights
   document.querySelectorAll('.process-box').forEach(el => el.classList.remove('drop-target'));
-  document.querySelectorAll('.sub-box').forEach(el => el.classList.remove('drop-target'));
 
   // Palette drag: drop badge into a box
   if (paletteDragTag) {
     const boxId = findBoxAt(e.clientX, e.clientY);
     if (boxId) {
-      const subBox = findSubBoxAt(e.clientX, e.clientY);
-      Connection.send({ type: 'tag:place', tagId: paletteDragTag.id, boxId, subBox: subBox || null });
+      Connection.send({ type: 'tag:place', tagId: paletteDragTag.id, boxId });
     }
     // If not dropped on a box, it just goes back to palette (no-op)
 
@@ -496,8 +470,7 @@ document.addEventListener('mouseup', (e) => {
       const boxId = findBoxAt(e.clientX, e.clientY);
       const tag = State.placedTags.find(t => t.id === dragTarget.id);
       const targetBox = boxId || (tag ? tag.boxId : null);
-      const subBox = findSubBoxAt(e.clientX, e.clientY);
-      Connection.send({ type: 'tag:unlock', tagId: dragTarget.id, boxId: targetBox, subBox: subBox || null });
+      Connection.send({ type: 'tag:unlock', tagId: dragTarget.id, boxId: targetBox });
 
       // Clean up the floating ghost
       dragTarget.el.remove();
@@ -732,12 +705,6 @@ const PROCESS_DATA = [
   { process: 'Warehouse Deals', subprocess: 'Trade In', level: 'NONE' },
 ];
 
-// Sub-boxes: processes that contain named sub-sections inside the box
-const SUB_BOXES = {
-  'Pick': ['V-Returns', 'Multis', 'Singles', 'Liquidations', 'LTL', 'Remove Hazmat', 'Donations', 'Remove Donations', 'Recycle'],
-  'Pack': ['Multis', 'Singles', 'LTL']
-};
-
 // Group process data by process name
 function getGroupedProcesses() {
   const groups = {};
@@ -826,12 +793,11 @@ function showBoxDialog(x, y) {
   search.value = '';
   error.textContent = '';
   renderPickerList(list, '', (entry) => {
-    const hasSubs = !!SUB_BOXES[entry.process];
     const box = {
       id: uid(), name: entry.subprocess,
       process: entry.process, level: entry.level,
       x: pendingBoxPosition.x, y: pendingBoxPosition.y,
-      w: hasSubs ? 320 : 280, h: hasSubs ? 500 : 200,
+      w: 280, h: 200,
       color: BOX_COLORS[boxColorIndex++ % BOX_COLORS.length]
     };
     Connection.send({ type: 'box:add', box });
@@ -848,12 +814,11 @@ function hideBoxDialog() {
 document.getElementById('picker-search').addEventListener('input', (e) => {
   const list = document.getElementById('picker-list');
   renderPickerList(list, e.target.value, (entry) => {
-    const hasSubs = !!SUB_BOXES[entry.process];
     const box = {
       id: uid(), name: entry.subprocess,
       process: entry.process, level: entry.level,
       x: pendingBoxPosition.x, y: pendingBoxPosition.y,
-      w: hasSubs ? 320 : 280, h: hasSubs ? 500 : 200,
+      w: 280, h: 200,
       color: BOX_COLORS[boxColorIndex++ % BOX_COLORS.length]
     };
     Connection.send({ type: 'box:add', box });
@@ -1019,10 +984,7 @@ function renderObjects() {
     // Render badges inside this box
     const boxBody = el.querySelector('.box-body');
     const boxTags = State.placedTags.filter(t => t.boxId === box.id);
-    const subBoxNames = SUB_BOXES[box.process];
-
-    // Helper to create a tag element
-    function createTagEl(tag) {
+    boxTags.forEach(tag => {
       const tagEl = document.createElement('div');
       const isLockedByOther = tag.lockedBy && tag.lockedBy !== State.sessionId;
       const isLockedByMe = tag.lockedBy === State.sessionId;
@@ -1042,6 +1004,7 @@ function renderObjects() {
           e.preventDefault();
           Connection.send({ type: 'tag:lock', tagId: tag.id });
 
+          // Create a floating ghost for dragging between boxes
           const ghost = document.createElement('div');
           ghost.className = 'board-tag locked-by-me';
           ghost.innerHTML = `<span class="badge-icon">${getInitials(tag.label)}</span><span class="tag-info"><strong>${escapeHtml(login)}</strong><span class="tag-firstname">${escapeHtml(firstName)}</span></span>`;
@@ -1060,33 +1023,9 @@ function renderObjects() {
           Connection.send({ type: 'tag:remove', tagId: tag.id });
         });
       }
-      return tagEl;
-    }
 
-    if (subBoxNames) {
-      // Render sub-boxes inside the body
-      subBoxNames.forEach(sbName => {
-        const sbEl = document.createElement('div');
-        sbEl.className = 'sub-box';
-        sbEl.dataset.subBox = sbName;
-        sbEl.innerHTML = `<div class="sub-box-header">${escapeHtml(sbName)}</div><div class="sub-box-body"></div>`;
-        const sbBody = sbEl.querySelector('.sub-box-body');
-        const sbTags = boxTags.filter(t => t.subBox === sbName);
-        sbTags.forEach(tag => sbBody.appendChild(createTagEl(tag)));
-        boxBody.appendChild(sbEl);
-      });
-      // Tags without a subBox (legacy) go into first sub-box
-      const unassigned = boxTags.filter(t => !t.subBox);
-      if (unassigned.length > 0) {
-        const firstSbBody = boxBody.querySelector('.sub-box-body');
-        if (firstSbBody) unassigned.forEach(tag => firstSbBody.appendChild(createTagEl(tag)));
-      }
-    } else {
-      // Regular box — tags go directly in body
-      boxTags.forEach(tag => {
-        boxBody.appendChild(createTagEl(tag));
-      });
-    }
+      boxBody.appendChild(tagEl);
+    });
 
     el.querySelector('.box-header').addEventListener('mousedown', (e) => {
       if (e.target.closest('.box-actions')) return;
@@ -1293,7 +1232,6 @@ EventBus.on('ws:tag:moved', (msg) => {
 EventBus.on('ws:tag:unlocked', (msg) => {
   const changes = { lockedBy: null };
   if (msg.boxId) changes.boxId = msg.boxId;
-  if (msg.subBox !== undefined) changes.subBox = msg.subBox;
   State.updatePlacedTag(msg.id, changes);
   renderObjects();
 });
