@@ -457,6 +457,12 @@ async function start() {
           broadcast({ type: 'stroke:added', stroke: msg.stroke }, ws);
           break;
         }
+        case 'stroke:remove': {
+          if (board.removeStroke(msg.id)) {
+            broadcast({ type: 'stroke:removed', id: msg.id }, ws);
+          }
+          break;
+        }
 
         // --- Notes ---
         case 'note:add': {

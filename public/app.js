@@ -214,6 +214,9 @@ let dragOffset = { x: 0, y: 0 };
 let resizeTarget = null;
 let resizeStart = { x: 0, y: 0, w: 0, h: 0 };
 
+// Eraser
+let isErasing = false;
+
 // Tag dragging from palette
 let paletteDragTag = null; // { id, label, el (ghost) }
 let paletteDragPos = { x: 0, y: 0 };
@@ -267,6 +270,7 @@ document.querySelectorAll('.tool').forEach(btn => {
     if (currentTool === 'select') container.style.cursor = 'default';
     else if (currentTool === 'box') container.style.cursor = 'copy';
     else if (currentTool === 'draw') container.style.cursor = 'crosshair';
+    else if (currentTool === 'eraser') container.style.cursor = 'pointer';
     else if (currentTool === 'note') container.style.cursor = 'copy';
     else if (currentTool === 'text') container.style.cursor = 'text';
   });
@@ -561,6 +565,7 @@ document.addEventListener('mouseup', (e) => {
       currentTool === 'select' ? 'default' :
       currentTool === 'box' ? 'copy' :
       currentTool === 'draw' ? 'crosshair' :
+      currentTool === 'eraser' ? 'pointer' :
       currentTool === 'note' ? 'copy' :
       currentTool === 'text' ? 'text' : 'default';
     return;
@@ -964,6 +969,9 @@ canvas.addEventListener('mousedown', (e) => {
       id: uid(), points: [{ x, y }],
       color: currentColor, width: currentStrokeWidth
     };
+  } else if (currentTool === 'eraser') {
+    isErasing = true;
+    eraseAtPoint(x, y);
   } else if (currentTool === 'box') {
     showBoxDialog(x, y);
   } else if (currentTool === 'note') {
@@ -973,7 +981,32 @@ canvas.addEventListener('mousedown', (e) => {
   }
 });
 
+// --- Eraser ---
+
+function eraseAtPoint(px, py) {
+  const threshold = 12; // pixels
+  for (let i = State.strokes.length - 1; i >= 0; i--) {
+    const stroke = State.strokes[i];
+    for (const pt of stroke.points) {
+      const dx = pt.x - px;
+      const dy = pt.y - py;
+      if (dx * dx + dy * dy < threshold * threshold) {
+        const id = stroke.id;
+        State.strokes.splice(i, 1);
+        Connection.send({ type: 'stroke:remove', id });
+        redraw();
+        return;
+      }
+    }
+  }
+}
+
 canvas.addEventListener('mousemove', (e) => {
+  if (isErasing && currentTool === 'eraser') {
+    const pt = screenToBoard(e.clientX, e.clientY);
+    eraseAtPoint(pt.x, pt.y);
+    return;
+  }
   if (!isDrawing || currentTool !== 'draw') return;
   const pt = screenToBoard(e.clientX, e.clientY);
   currentStroke.points.push(pt);
@@ -998,6 +1031,7 @@ function finishStroke() {
     redraw();
   }
   isDrawing = false;
+  isErasing = false;
   currentStroke = null;
 }
 
@@ -1422,6 +1456,7 @@ EventBus.on('ws:box:error', (msg) => {
 
 // Strokes
 EventBus.on('ws:stroke:added', (msg) => { State.addStroke(msg.stroke); redraw(); });
+EventBus.on('ws:stroke:removed', (msg) => { State.strokes = State.strokes.filter(s => s.id !== msg.id); redraw(); });
 
 // Notes
 EventBus.on('ws:note:added', (msg) => { State.addNote(msg.note); renderObjects(); });
