@@ -176,7 +176,7 @@ function redraw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
   // Grid
-  ctx.strokeStyle = 'rgba(255,255,255,0.03)';
+  ctx.strokeStyle = document.documentElement.getAttribute('data-theme') === 'light' ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.03)';
   ctx.lineWidth = 1;
   const gridSize = 40;
   for (let x = 0; x < canvas.width; x += gridSize) {
@@ -305,6 +305,39 @@ document.getElementById('tag-panel-close').addEventListener('click', () => {
   setTimeout(resizeCanvas, 220);
 });
 
+// --- Theme toggle ---
+
+document.getElementById('theme-toggle-btn').addEventListener('click', () => {
+  const root = document.documentElement;
+  const btn = document.getElementById('theme-toggle-btn');
+  const isLight = root.getAttribute('data-theme') === 'light';
+  if (isLight) {
+    root.removeAttribute('data-theme');
+    btn.textContent = 'Light';
+    localStorage.setItem('wb-theme', 'dark');
+  } else {
+    root.setAttribute('data-theme', 'light');
+    btn.textContent = 'Dark';
+    localStorage.setItem('wb-theme', 'light');
+  }
+  redraw();
+});
+
+// Restore saved theme
+(function() {
+  const saved = localStorage.getItem('wb-theme');
+  if (saved === 'light') {
+    document.documentElement.setAttribute('data-theme', 'light');
+    document.getElementById('theme-toggle-btn').textContent = 'Dark';
+  }
+})();
+
+// --- Badge search ---
+
+document.getElementById('badge-search').addEventListener('input', () => {
+  renderTagPalette();
+});
+
 // --- Tag palette rendering ---
 
 function renderTagPalette() {
@@ -313,13 +346,32 @@ function renderTagPalette() {
 
   if (State.availableTags.length === 0) {
     const empty = document.createElement('div');
-    empty.style.cssText = 'padding: 16px; color: #a0aec0; font-size: 0.78rem; text-align: center;';
+    empty.style.cssText = 'padding: 16px; color: var(--text-secondary); font-size: 0.78rem; text-align: center;';
     empty.textContent = 'No employees synced yet. Use the browser extension on FCLM to add employees.';
     palette.appendChild(empty);
     return;
   }
 
-  State.availableTags.forEach(tag => {
+  const searchInput = document.getElementById('badge-search');
+  const query = (searchInput ? searchInput.value : '').toLowerCase().trim();
+
+  const filtered = query
+    ? State.availableTags.filter(tag => {
+        const emp = tag.employeeId ? State.getEmployee(tag.employeeId) : null;
+        const login = emp ? emp.login || '' : '';
+        return tag.label.toLowerCase().includes(query) || login.toLowerCase().includes(query);
+      })
+    : State.availableTags;
+
+  if (filtered.length === 0) {
+    const empty = document.createElement('div');
+    empty.style.cssText = 'padding: 16px; color: var(--text-secondary); font-size: 0.78rem; text-align: center;';
+    empty.textContent = 'No badges match your search.';
+    palette.appendChild(empty);
+    return;
+  }
+
+  filtered.forEach(tag => {
     const el = document.createElement('div');
     const isPlaced = State.isTagPlaced(tag.id);
     el.className = 'palette-tag' + (isPlaced ? ' placed' : '');

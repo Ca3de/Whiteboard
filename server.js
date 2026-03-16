@@ -112,7 +112,13 @@ const AA_ROSTER = [
   'donettaj', 'masengap', 'belavlag', 'boithan', 'jacqamic',
   'hnijenny', 'simpjony', 'angladch', 'lkawl', 'wkhanars',
   'lzohming', 'ronalcou', 'szweldey', 'whabebec', 'genebezu',
-  'uniscer', 'alzamb'
+  'uniscer', 'alzamb',
+  'abddzaic', 'rayrapha', 'ibraimus', 'towendiy', 'chrislpe',
+  'denhelen', 'ruzange', 'kililoub', 'rosemsau', 'bwingaki',
+  'nkuruji', 'alenouse', 'zyaalwit', 'nwmioune', 'delpkone',
+  'grimadod', 'tunzaw', 'legesswo', 'flalvan', 'rosenbw',
+  'judavisd', 'dstevenn', 'mompremm', 'joseadem', 'zabjeann',
+  'ibmouhas'
 ];
 
 async function start() {

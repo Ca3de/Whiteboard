@@ -40,6 +40,8 @@
     <button id="zoom-in-btn" class="tool" title="Zoom In">+</button>
     <button id="zoom-reset-btn" class="tool" title="Reset Zoom" style="font-size:0.7rem">Fit</button>
     <div class="spacer"></div>
+    <button id="theme-toggle-btn" title="Toggle Light/Dark Theme">Light</button>
+    <div class="separator"></div>
     <div id="connection-status" class="status connected">Connected</div>
   </div>
 
@@ -49,6 +51,9 @@
       <div class="tag-panel-header">
         <span>Badges</span>
         <button id="tag-panel-close">&times;</button>
+      </div>
+      <div id="badge-search-wrap">
+        <input type="text" id="badge-search" placeholder="Search badges..." autocomplete="off">
       </div>
       <div id="tag-palette">
         <!-- Tags rendered by JS -->
