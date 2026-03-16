@@ -27,17 +27,32 @@ const DEFAULT_ROSTER = [
   'donettaj', 'masengap', 'belavlag', 'boithan', 'jacqamic',
   'hnijenny', 'simpjony', 'angladch', 'lkawl', 'wkhanars',
   'lzohming', 'ronalcou', 'szweldey', 'whabebec', 'genebezu',
-  'uniscer', 'alzamb'
+  'uniscer', 'alzamb',
+  'abddzaic', 'rayrapha', 'ibraimus', 'towendiy', 'chrislpe',
+  'denhelen', 'ruzange', 'kililoub', 'rosemsau', 'bwingaki',
+  'nkuruji', 'alenouse', 'zyaalwit', 'nwmioune', 'delpkone',
+  'grimadod', 'tunzaw', 'legesswo', 'flalvan', 'rosenbw',
+  'judavisd', 'dstevenn', 'mompremm', 'joseadem', 'zabjeann',
+  'ibmouhas'
 ];
 
 // --- Initialization ---
 
 chrome.runtime.onInstalled.addListener(() => {
-  // Seed roster on first install
+  // Seed roster on first install, or merge new entries on update
   chrome.storage.local.get('roster', (data) => {
     if (!data.roster || data.roster.length === 0) {
       chrome.storage.local.set({ roster: DEFAULT_ROSTER });
       console.log('[Whiteboard BG] Roster seeded with', DEFAULT_ROSTER.length, 'AAs');
+    } else {
+      // Merge any new DEFAULT_ROSTER entries into the existing roster
+      const existing = new Set(data.roster);
+      const newEntries = DEFAULT_ROSTER.filter(login => !existing.has(login));
+      if (newEntries.length > 0) {
+        const merged = [...data.roster, ...newEntries];
+        chrome.storage.local.set({ roster: merged });
+        console.log('[Whiteboard BG] Merged', newEntries.length, 'new AAs into roster:', newEntries.join(', '));
+      }
     }
   });
 
