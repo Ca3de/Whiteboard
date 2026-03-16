@@ -822,6 +822,7 @@ const PROCESS_DATA = [
   { process: 'Vendor Returns', subprocess: 'V-Returns Sort', level: 'NONE' },
   { process: 'Vendor Returns', subprocess: 'V-Returns Stow', level: 'NONE' },
   { process: 'Vendor Returns', subprocess: 'V-Returns Support', level: 'NONE' },
+  { process: 'Vendor Returns', subprocess: 'V-Returns WaterSpider', level: 'NONE' },
   { process: 'Warehouse Deals', subprocess: 'Grading', level: 'NONE' },
   { process: 'Warehouse Deals', subprocess: 'Kindle', level: 'NONE' },
   { process: 'Warehouse Deals', subprocess: 'WD Sort', level: 'INTERMEDIATE' },
