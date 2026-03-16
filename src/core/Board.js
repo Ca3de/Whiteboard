@@ -356,6 +356,16 @@ class Board {
     return stroke;
   }
 
+  removeStroke(id) {
+    const before = this._strokes.length;
+    this._strokes = this._strokes.filter(s => s.id !== id);
+    if (this._strokes.length < before) {
+      this._onEvent('stroke:removed', { id });
+      return true;
+    }
+    return false;
+  }
+
   // --- Notes ---
 
   addNote(note) {
