@@ -341,7 +341,7 @@ function renderTagPalette() {
   });
 }
 
-// --- Hit-test: find which box the cursor is over ---
+// --- Hit-test: find which box/sub-box the cursor is over ---
 
 function findBoxAt(clientX, clientY) {
   const boxEls = document.querySelectorAll('.process-box');
@@ -361,7 +361,7 @@ function findSubBoxAt(clientX, clientY) {
     const rect = el.getBoundingClientRect();
     if (clientX >= rect.left && clientX <= rect.right &&
         clientY >= rect.top && clientY <= rect.bottom) {
-      return el.dataset.subBox;
+      return el.dataset.subBoxId;
     }
   }
   return null;
@@ -390,15 +390,14 @@ document.addEventListener('mousemove', (e) => {
     paletteDragTag.el.style.top = e.clientY - 12 + 'px';
 
     // Highlight box/sub-box under cursor
-    document.querySelectorAll('.process-box').forEach(el => el.classList.remove('drop-target'));
-    document.querySelectorAll('.sub-box').forEach(el => el.classList.remove('drop-target'));
+    document.querySelectorAll('.process-box, .sub-box').forEach(el => el.classList.remove('drop-target'));
     const boxId = findBoxAt(e.clientX, e.clientY);
     if (boxId) {
       const boxEl = document.querySelector(`[data-box-id="${boxId}"]`);
       if (boxEl) boxEl.classList.add('drop-target');
-      const sb = findSubBoxAt(e.clientX, e.clientY);
-      if (sb) {
-        const sbEl = boxEl.querySelector(`.sub-box[data-sub-box="${sb}"]`);
+      const sbId = findSubBoxAt(e.clientX, e.clientY);
+      if (sbId) {
+        const sbEl = document.querySelector(`[data-sub-box-id="${sbId}"]`);
         if (sbEl) sbEl.classList.add('drop-target');
       }
     }
@@ -410,15 +409,14 @@ document.addEventListener('mousemove', (e) => {
     dragTarget.el.style.left = e.clientX - 30 + 'px';
     dragTarget.el.style.top = e.clientY - 12 + 'px';
 
-    document.querySelectorAll('.process-box').forEach(el => el.classList.remove('drop-target'));
-    document.querySelectorAll('.sub-box').forEach(el => el.classList.remove('drop-target'));
+    document.querySelectorAll('.process-box, .sub-box').forEach(el => el.classList.remove('drop-target'));
     const boxId = findBoxAt(e.clientX, e.clientY);
     if (boxId) {
       const boxEl = document.querySelector(`[data-box-id="${boxId}"]`);
       if (boxEl) boxEl.classList.add('drop-target');
-      const sb = findSubBoxAt(e.clientX, e.clientY);
-      if (sb) {
-        const sbEl = boxEl.querySelector(`.sub-box[data-sub-box="${sb}"]`);
+      const sbId = findSubBoxAt(e.clientX, e.clientY);
+      if (sbId) {
+        const sbEl = document.querySelector(`[data-sub-box-id="${sbId}"]`);
         if (sbEl) sbEl.classList.add('drop-target');
       }
     }
@@ -462,15 +460,14 @@ document.addEventListener('mousemove', (e) => {
 
 document.addEventListener('mouseup', (e) => {
   // Clear drop highlights
-  document.querySelectorAll('.process-box').forEach(el => el.classList.remove('drop-target'));
-  document.querySelectorAll('.sub-box').forEach(el => el.classList.remove('drop-target'));
+  document.querySelectorAll('.process-box, .sub-box').forEach(el => el.classList.remove('drop-target'));
 
   // Palette drag: drop badge into a box
   if (paletteDragTag) {
     const boxId = findBoxAt(e.clientX, e.clientY);
     if (boxId) {
-      const subBox = findSubBoxAt(e.clientX, e.clientY);
-      Connection.send({ type: 'tag:place', tagId: paletteDragTag.id, boxId, subBox: subBox || null });
+      const subBoxId = findSubBoxAt(e.clientX, e.clientY) || null;
+      Connection.send({ type: 'tag:place', tagId: paletteDragTag.id, boxId, subBoxId });
     }
     // If not dropped on a box, it just goes back to palette (no-op)
 
@@ -492,12 +489,12 @@ document.addEventListener('mouseup', (e) => {
       const t = State.texts.find(t => t.id === dragTarget.id);
       if (t) Connection.send({ type: 'text:move', id: t.id, x: t.x, y: t.y });
     } else if (dragTarget.type === 'tag') {
-      // Drop badge into whatever box is under cursor, or keep in original box
+      // Drop badge into whatever box/sub-box is under cursor, or keep in original
       const boxId = findBoxAt(e.clientX, e.clientY);
       const tag = State.placedTags.find(t => t.id === dragTarget.id);
       const targetBox = boxId || (tag ? tag.boxId : null);
-      const subBox = findSubBoxAt(e.clientX, e.clientY);
-      Connection.send({ type: 'tag:unlock', tagId: dragTarget.id, boxId: targetBox, subBox: subBox || null });
+      const subBoxId = findSubBoxAt(e.clientX, e.clientY) || null;
+      Connection.send({ type: 'tag:unlock', tagId: dragTarget.id, boxId: targetBox, subBoxId });
 
       // Clean up the floating ghost
       dragTarget.el.remove();
@@ -732,12 +729,6 @@ const PROCESS_DATA = [
   { process: 'Warehouse Deals', subprocess: 'Trade In', level: 'NONE' },
 ];
 
-// Sub-boxes: processes that contain named sub-sections inside the box
-const SUB_BOXES = {
-  'Pick': ['V-Returns', 'Multis', 'Singles', 'Liquidations', 'LTL', 'Remove Hazmat', 'Donations', 'Remove Donations', 'Recycle'],
-  'Pack': ['Multis', 'Singles', 'LTL']
-};
-
 // Group process data by process name
 function getGroupedProcesses() {
   const groups = {};
@@ -826,12 +817,11 @@ function showBoxDialog(x, y) {
   search.value = '';
   error.textContent = '';
   renderPickerList(list, '', (entry) => {
-    const hasSubs = !!SUB_BOXES[entry.process];
     const box = {
       id: uid(), name: entry.subprocess,
       process: entry.process, level: entry.level,
       x: pendingBoxPosition.x, y: pendingBoxPosition.y,
-      w: hasSubs ? 320 : 280, h: hasSubs ? 500 : 200,
+      w: 280, h: 200,
       color: BOX_COLORS[boxColorIndex++ % BOX_COLORS.length]
     };
     Connection.send({ type: 'box:add', box });
@@ -848,12 +838,11 @@ function hideBoxDialog() {
 document.getElementById('picker-search').addEventListener('input', (e) => {
   const list = document.getElementById('picker-list');
   renderPickerList(list, e.target.value, (entry) => {
-    const hasSubs = !!SUB_BOXES[entry.process];
     const box = {
       id: uid(), name: entry.subprocess,
       process: entry.process, level: entry.level,
       x: pendingBoxPosition.x, y: pendingBoxPosition.y,
-      w: hasSubs ? 320 : 280, h: hasSubs ? 500 : 200,
+      w: 280, h: 200,
       color: BOX_COLORS[boxColorIndex++ % BOX_COLORS.length]
     };
     Connection.send({ type: 'box:add', box });
@@ -1001,6 +990,7 @@ function renderObjects() {
     el.style.top = box.y + 'px';
     el.style.width = box.w + 'px';
     el.style.minHeight = box.h + 'px';
+    const subBoxes = box.subBoxes || [];
     el.innerHTML = `
       <div class="box-header">
         <div class="box-name-wrap">
@@ -1008,6 +998,7 @@ function renderObjects() {
           <span class="box-name">${escapeHtml(box.name)}</span>
         </div>
         <div class="box-actions">
+          <button class="box-add-sub-btn" title="Add sub-box">+</button>
           <button class="box-rename-btn" title="Rename">&#9998;</button>
           <button class="box-delete-btn" title="Delete">&times;</button>
         </div>
@@ -1015,11 +1006,6 @@ function renderObjects() {
       <div class="box-body"></div>
       <div class="box-resize-handle"></div>
     `;
-
-    // Render badges inside this box
-    const boxBody = el.querySelector('.box-body');
-    const boxTags = State.placedTags.filter(t => t.boxId === box.id);
-    const subBoxNames = SUB_BOXES[box.process];
 
     // Helper to create a tag element
     function createTagEl(tag) {
@@ -1063,29 +1049,33 @@ function renderObjects() {
       return tagEl;
     }
 
-    if (subBoxNames) {
-      // Render sub-boxes inside the body
-      subBoxNames.forEach(sbName => {
+    // Render badges inside this box
+    const boxBody = el.querySelector('.box-body');
+    const boxTags = State.placedTags.filter(t => t.boxId === box.id);
+
+    if (subBoxes.length > 0) {
+      // Render sub-boxes
+      subBoxes.forEach(sb => {
         const sbEl = document.createElement('div');
         sbEl.className = 'sub-box';
-        sbEl.dataset.subBox = sbName;
-        sbEl.innerHTML = `<div class="sub-box-header">${escapeHtml(sbName)}</div><div class="sub-box-body"></div>`;
+        sbEl.dataset.subBoxId = sb.id;
+        sbEl.innerHTML = `<div class="sub-box-header"><span class="sub-box-name">${escapeHtml(sb.name)}</span><button class="sub-box-delete-btn" title="Remove sub-box">&times;</button></div><div class="sub-box-body"></div>`;
         const sbBody = sbEl.querySelector('.sub-box-body');
-        const sbTags = boxTags.filter(t => t.subBox === sbName);
-        sbTags.forEach(tag => sbBody.appendChild(createTagEl(tag)));
+        boxTags.filter(t => t.subBoxId === sb.id).forEach(tag => sbBody.appendChild(createTagEl(tag)));
+
+        sbEl.querySelector('.sub-box-delete-btn').addEventListener('click', (e) => {
+          e.stopPropagation();
+          Connection.send({ type: 'subbox:delete', boxId: box.id, subBoxId: sb.id });
+        });
+
         boxBody.appendChild(sbEl);
       });
-      // Tags without a subBox (legacy) go into first sub-box
-      const unassigned = boxTags.filter(t => !t.subBox);
-      if (unassigned.length > 0) {
-        const firstSbBody = boxBody.querySelector('.sub-box-body');
-        if (firstSbBody) unassigned.forEach(tag => firstSbBody.appendChild(createTagEl(tag)));
-      }
+      // Tags not assigned to any sub-box go at the end
+      const unassigned = boxTags.filter(t => !t.subBoxId || !subBoxes.some(sb => sb.id === t.subBoxId));
+      unassigned.forEach(tag => boxBody.appendChild(createTagEl(tag)));
     } else {
-      // Regular box — tags go directly in body
-      boxTags.forEach(tag => {
-        boxBody.appendChild(createTagEl(tag));
-      });
+      // No sub-boxes — tags go directly in body
+      boxTags.forEach(tag => boxBody.appendChild(createTagEl(tag)));
     }
 
     el.querySelector('.box-header').addEventListener('mousedown', (e) => {
@@ -1103,6 +1093,15 @@ function renderObjects() {
       resizeStart = { x: e.clientX, y: e.clientY, w: box.w, h: box.h };
       e.preventDefault();
       e.stopPropagation();
+    });
+
+    el.querySelector('.box-add-sub-btn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      const name = prompt('Sub-box name:');
+      if (name && name.trim()) {
+        const subBox = { id: uid(), name: name.trim() };
+        Connection.send({ type: 'subbox:add', boxId: box.id, subBox });
+      }
     });
 
     el.querySelector('.box-rename-btn').addEventListener('click', (e) => {
@@ -1208,7 +1207,16 @@ function escapeHtml(str) {
 EventBus.on('ws:init', (msg) => {
   State.sessionId = msg.sessionId;
   State.load(msg.state);
-  console.log('[WS] Session:', State.sessionId, '| Tags:', State.availableTags.length, '| Placed:', State.placedTags.length);
+  console.log('[WS] Session:', State.sessionId, '| Employees:', State.employees.length, '| Tags:', State.availableTags.length, '| Placed:', State.placedTags.length, '| Boxes:', State.boxes.length);
+  // Debug: check for inconsistencies
+  const orphanedTags = State.placedTags.filter(t => !State.boxes.some(b => b.id === t.boxId));
+  if (orphanedTags.length > 0) {
+    console.warn('[WS] Orphaned placed tags (box missing):', orphanedTags.map(t => `${t.label} → box:${t.boxId}`));
+  }
+  const missingEmps = State.placedTags.filter(t => t.employeeId && !State.getEmployee(t.employeeId));
+  if (missingEmps.length > 0) {
+    console.warn('[WS] Placed tags with missing employee:', missingEmps.map(t => `${t.label} emp:${t.employeeId}`));
+  }
   redraw();
   renderObjects();
   renderTagPalette();
@@ -1293,7 +1301,7 @@ EventBus.on('ws:tag:moved', (msg) => {
 EventBus.on('ws:tag:unlocked', (msg) => {
   const changes = { lockedBy: null };
   if (msg.boxId) changes.boxId = msg.boxId;
-  if (msg.subBox !== undefined) changes.subBox = msg.subBox;
+  if (msg.subBoxId !== undefined) changes.subBoxId = msg.subBoxId;
   State.updatePlacedTag(msg.id, changes);
   renderObjects();
 });
@@ -1320,6 +1328,34 @@ EventBus.on('ws:box:deleted', (msg) => {
   }
   renderObjects();
   renderTagPalette();
+});
+
+// Sub-boxes
+EventBus.on('ws:subbox:added', (msg) => {
+  const box = State.boxes.find(b => b.id === msg.boxId);
+  if (box) {
+    if (!box.subBoxes) box.subBoxes = [];
+    if (!box.subBoxes.some(sb => sb.id === msg.subBox.id)) {
+      box.subBoxes.push(msg.subBox);
+    }
+  }
+  renderObjects();
+});
+
+EventBus.on('ws:subbox:deleted', (msg) => {
+  const box = State.boxes.find(b => b.id === msg.boxId);
+  if (box && box.subBoxes) {
+    box.subBoxes = box.subBoxes.filter(sb => sb.id !== msg.subBoxId);
+    // Clear subBoxId from affected tags
+    State.placedTags.forEach(t => {
+      if (t.boxId === msg.boxId && t.subBoxId === msg.subBoxId) t.subBoxId = null;
+    });
+  }
+  renderObjects();
+});
+
+EventBus.on('ws:subbox:error', (msg) => {
+  alert(msg.message || 'Sub-box error');
 });
 
 EventBus.on('ws:box:error', (msg) => {
