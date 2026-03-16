@@ -11,6 +11,7 @@ const LEVEL_RANK = { 'none': 0, 'beginner': 1, 'intermediate': 2, 'expert': 3, '
 // E.g. "Pick RF" permission also allows placement on "V-Returns Pick" boxes.
 const CROSS_PROCESS_MAP = {
   'v-returns pick': ['pick rf'],
+  'v-returns waterspider': ['c-returns support'],
 };
 function parseLevel(raw) {
   const s = raw.trim().toLowerCase();
