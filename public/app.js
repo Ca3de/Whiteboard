@@ -233,7 +233,10 @@ const MAX_ZOOM = 3;
 function applyViewportTransform() {
   const vp = document.getElementById('viewport');
   vp.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
-  document.getElementById('zoom-level').textContent = Math.round(zoom * 100) + '%';
+  const zoomEl = document.getElementById('zoom-level');
+  if (document.activeElement !== zoomEl) {
+    zoomEl.value = Math.round(zoom * 100) + '%';
+  }
 }
 
 // Convert screen (client) coordinates to board coordinates
@@ -647,6 +650,45 @@ document.getElementById('zoom-reset-btn').addEventListener('click', () => {
   applyViewportTransform();
   resizeCanvas();
 });
+
+// Editable zoom level input
+const zoomInput = document.getElementById('zoom-level');
+zoomInput.addEventListener('focus', () => {
+  zoomInput.value = Math.round(zoom * 100);
+  zoomInput.select();
+});
+
+zoomInput.addEventListener('blur', () => {
+  applyZoomFromInput();
+});
+
+zoomInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    applyZoomFromInput();
+    zoomInput.blur();
+  } else if (e.key === 'Escape') {
+    zoomInput.value = Math.round(zoom * 100) + '%';
+    zoomInput.blur();
+  }
+});
+
+function applyZoomFromInput() {
+  const raw = parseInt(zoomInput.value.replace('%', ''), 10);
+  if (!isNaN(raw) && raw > 0) {
+    const container = document.getElementById('canvas-container');
+    const rect = container.getBoundingClientRect();
+    const cx = rect.width / 2;
+    const cy = rect.height / 2;
+    const oldZoom = zoom;
+    zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, raw / 100));
+    panX = cx - (cx - panX) * (zoom / oldZoom);
+    panY = cy - (cy - panY) * (zoom / oldZoom);
+    applyViewportTransform();
+    resizeCanvas();
+  } else {
+    zoomInput.value = Math.round(zoom * 100) + '%';
+  }
+}
 
 // --- Process / Subprocess data ---
 
