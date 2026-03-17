@@ -12,6 +12,7 @@ const LEVEL_RANK = { 'none': 0, 'beginner': 1, 'intermediate': 2, 'expert': 3, '
 const CROSS_PROCESS_MAP = {
   'v-returns pick': ['pick rf'],
   'v-returns waterspider': ['c-returns support'],
+  'v-returns support': ['c-returns support'],
 };
 function parseLevel(raw) {
   const s = raw.trim().toLowerCase();

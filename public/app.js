@@ -1106,9 +1106,19 @@ function createText(x, y) {
 
 // --- Render all objects ---
 
+let _renderPending = false;
+function scheduleRender() {
+  if (_renderPending) return;
+  _renderPending = true;
+  requestAnimationFrame(() => {
+    _renderPending = false;
+    renderObjects();
+  });
+}
+
 function renderObjects() {
   const layer = document.getElementById('objects-layer');
-  layer.innerHTML = '';
+  const frag = document.createDocumentFragment();
 
   // Boxes (with badges rendered inside)
   State.boxes.forEach(box => {
@@ -1136,7 +1146,7 @@ function renderObjects() {
       <div class="box-resize-handle"></div>
     `;
 
-    // Helper to create a tag element
+    // Helper to create a tag element (no per-element listeners — uses delegation)
     function createTagEl(tag) {
       const tagEl = document.createElement('div');
       const isLockedByOther = tag.lockedBy && tag.lockedBy !== State.sessionId;
@@ -1146,35 +1156,12 @@ function renderObjects() {
       if (isLockedByOther) tagEl.classList.add('locked');
       if (isLockedByMe) tagEl.classList.add('locked-by-me');
       tagEl.dataset.tagId = tag.id;
+      tagEl.dataset.tagLabel = tag.label;
+      tagEl.dataset.tagBoxId = tag.boxId || '';
       const emp = tag.employeeId ? State.getEmployee(tag.employeeId) : null;
       const login = emp ? emp.login || emp.id : '';
       const firstName = emp && emp.name ? emp.name.split(' ')[0] : tag.label;
       tagEl.innerHTML = `<span class="badge-icon">${getInitials(tag.label)}</span><span class="tag-info"><strong>${escapeHtml(login)}</strong><span class="tag-firstname">${escapeHtml(firstName)}</span></span><button class="tag-remove-btn">&times;</button>`;
-
-      if (!isLockedByOther) {
-        tagEl.addEventListener('mousedown', (e) => {
-          if (e.target.classList.contains('tag-remove-btn')) return;
-          e.preventDefault();
-          Connection.send({ type: 'tag:lock', tagId: tag.id });
-
-          const ghost = document.createElement('div');
-          ghost.className = 'board-tag locked-by-me';
-          ghost.innerHTML = `<span class="badge-icon">${getInitials(tag.label)}</span><span class="tag-info"><strong>${escapeHtml(login)}</strong><span class="tag-firstname">${escapeHtml(firstName)}</span></span>`;
-          ghost.style.position = 'fixed';
-          ghost.style.left = e.clientX - 30 + 'px';
-          ghost.style.top = e.clientY - 12 + 'px';
-          ghost.style.zIndex = '5000';
-          ghost.style.pointerEvents = 'none';
-          document.body.appendChild(ghost);
-
-          dragTarget = { type: 'tag', id: tag.id, el: ghost, originalBoxId: tag.boxId };
-        });
-
-        tagEl.querySelector('.tag-remove-btn').addEventListener('click', (e) => {
-          e.stopPropagation();
-          Connection.send({ type: 'tag:remove', tagId: tag.id });
-        });
-      }
       return tagEl;
     }
 
@@ -1192,11 +1179,6 @@ function renderObjects() {
         const sbBody = sbEl.querySelector('.sub-box-body');
         boxTags.filter(t => t.subBoxId === sb.id).forEach(tag => sbBody.appendChild(createTagEl(tag)));
 
-        sbEl.querySelector('.sub-box-delete-btn').addEventListener('click', (e) => {
-          e.stopPropagation();
-          Connection.send({ type: 'subbox:delete', boxId: box.id, subBoxId: sb.id });
-        });
-
         boxBody.appendChild(sbEl);
       });
       // Tags not assigned to any sub-box go at the end
@@ -1207,48 +1189,7 @@ function renderObjects() {
       boxTags.forEach(tag => boxBody.appendChild(createTagEl(tag)));
     }
 
-    el.querySelector('.box-header').addEventListener('mousedown', (e) => {
-      if (e.target.closest('.box-actions')) return;
-      dragTarget = { type: 'box', id: box.id, el };
-      const bp = screenToBoard(e.clientX, e.clientY);
-      dragOffset.x = bp.x - box.x;
-      dragOffset.y = bp.y - box.y;
-      el.classList.add('dragging');
-      e.preventDefault();
-    });
-
-    el.querySelector('.box-resize-handle').addEventListener('mousedown', (e) => {
-      resizeTarget = { id: box.id, el };
-      resizeStart = { x: e.clientX, y: e.clientY, w: box.w, h: box.h };
-      e.preventDefault();
-      e.stopPropagation();
-    });
-
-    el.querySelector('.box-add-sub-btn').addEventListener('click', (e) => {
-      e.stopPropagation();
-      const name = prompt('Sub-box name:');
-      if (name && name.trim()) {
-        const subBox = { id: uid(), name: name.trim() };
-        Connection.send({ type: 'subbox:add', boxId: box.id, subBox });
-      }
-    });
-
-    el.querySelector('.box-rename-btn').addEventListener('click', (e) => {
-      e.stopPropagation();
-      showRenameDialog(box.id);
-    });
-
-    el.querySelector('.box-delete-btn').addEventListener('click', (e) => {
-      e.stopPropagation();
-      // Return badges in this box to palette
-      State.placedTags = State.placedTags.filter(t => t.boxId !== box.id);
-      State.removeBox(box.id);
-      Connection.send({ type: 'box:delete', id: box.id });
-      renderObjects();
-      renderTagPalette();
-    });
-
-    layer.appendChild(el);
+    frag.appendChild(el);
   });
 
   // Sticky notes
@@ -1263,28 +1204,7 @@ function renderObjects() {
       <button class="note-delete">&times;</button>
     `;
 
-    el.addEventListener('mousedown', (e) => {
-      if (e.target.classList.contains('note-content') || e.target.classList.contains('note-delete')) return;
-      dragTarget = { type: 'note', id: note.id, el };
-      const bp = screenToBoard(e.clientX, e.clientY);
-      dragOffset.x = bp.x - note.x;
-      dragOffset.y = bp.y - note.y;
-      el.classList.add('dragging');
-      e.preventDefault();
-    });
-
-    el.querySelector('.note-content').addEventListener('input', (e) => {
-      State.updateNote(note.id, { text: e.target.value });
-      Connection.send({ type: 'note:update', id: note.id, text: e.target.value });
-    });
-
-    el.querySelector('.note-delete').addEventListener('click', () => {
-      State.removeNote(note.id);
-      Connection.send({ type: 'note:delete', id: note.id });
-      renderObjects();
-    });
-
-    layer.appendChild(el);
+    frag.appendChild(el);
   });
 
   // Text labels
@@ -1299,31 +1219,191 @@ function renderObjects() {
     el.textContent = t.text;
     el.innerHTML += `<button class="text-delete">&times;</button>`;
 
-    el.addEventListener('mousedown', (e) => {
-      if (e.target.classList.contains('text-delete')) return;
-      if (document.activeElement === el) return;
-      dragTarget = { type: 'text', id: t.id, el };
+    frag.appendChild(el);
+  });
+
+  // Swap DOM in one shot
+  layer.innerHTML = '';
+  layer.appendChild(frag);
+}
+
+// --- Event delegation on objects layer ---
+
+(function setupDelegation() {
+  const layer = document.getElementById('objects-layer');
+
+  layer.addEventListener('mousedown', (e) => {
+    const target = e.target;
+
+    // --- Badge drag ---
+    const tagEl = target.closest('.board-tag');
+    if (tagEl && !tagEl.classList.contains('locked') && !target.classList.contains('tag-remove-btn')) {
+      e.preventDefault();
+      const tagId = tagEl.dataset.tagId;
+      const tag = State.placedTags.find(t => t.id === tagId);
+      if (!tag) return;
+      Connection.send({ type: 'tag:lock', tagId });
+
+      const emp = tag.employeeId ? State.getEmployee(tag.employeeId) : null;
+      const login = emp ? emp.login || emp.id : '';
+      const firstName = emp && emp.name ? emp.name.split(' ')[0] : tag.label;
+      const ghost = document.createElement('div');
+      ghost.className = 'board-tag locked-by-me';
+      ghost.innerHTML = `<span class="badge-icon">${getInitials(tag.label)}</span><span class="tag-info"><strong>${escapeHtml(login)}</strong><span class="tag-firstname">${escapeHtml(firstName)}</span></span>`;
+      ghost.style.cssText = `position:fixed;left:${e.clientX - 30}px;top:${e.clientY - 12}px;z-index:5000;pointer-events:none;`;
+      document.body.appendChild(ghost);
+      dragTarget = { type: 'tag', id: tagId, el: ghost, originalBoxId: tag.boxId };
+      return;
+    }
+
+    // --- Box header drag ---
+    const boxHeader = target.closest('.box-header');
+    if (boxHeader && !target.closest('.box-actions')) {
+      const boxEl = boxHeader.closest('.process-box');
+      const boxId = boxEl.dataset.boxId;
+      const box = State.boxes.find(b => b.id === boxId);
+      if (!box) return;
+      dragTarget = { type: 'box', id: boxId, el: boxEl };
+      const bp = screenToBoard(e.clientX, e.clientY);
+      dragOffset.x = bp.x - box.x;
+      dragOffset.y = bp.y - box.y;
+      boxEl.classList.add('dragging');
+      e.preventDefault();
+      return;
+    }
+
+    // --- Box resize handle ---
+    if (target.classList.contains('box-resize-handle')) {
+      const boxEl = target.closest('.process-box');
+      const boxId = boxEl.dataset.boxId;
+      const box = State.boxes.find(b => b.id === boxId);
+      if (!box) return;
+      resizeTarget = { id: boxId, el: boxEl };
+      resizeStart = { x: e.clientX, y: e.clientY, w: box.w, h: box.h };
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+
+    // --- Note drag ---
+    const noteEl = target.closest('.sticky-note');
+    if (noteEl && !target.classList.contains('note-content') && !target.classList.contains('note-delete')) {
+      const noteId = noteEl.dataset.noteId;
+      const note = State.notes.find(n => n.id === noteId);
+      if (!note) return;
+      dragTarget = { type: 'note', id: noteId, el: noteEl };
+      const bp = screenToBoard(e.clientX, e.clientY);
+      dragOffset.x = bp.x - note.x;
+      dragOffset.y = bp.y - note.y;
+      noteEl.classList.add('dragging');
+      e.preventDefault();
+      return;
+    }
+
+    // --- Text drag ---
+    const textEl = target.closest('.text-label');
+    if (textEl && !target.classList.contains('text-delete') && document.activeElement !== textEl) {
+      const textId = textEl.dataset.textId;
+      const t = State.texts.find(t => t.id === textId);
+      if (!t) return;
+      dragTarget = { type: 'text', id: textId, el: textEl };
       const bp = screenToBoard(e.clientX, e.clientY);
       dragOffset.x = bp.x - t.x;
       dragOffset.y = bp.y - t.y;
-      el.classList.add('dragging');
-    });
-
-    el.addEventListener('input', () => {
-      const newText = el.childNodes[0]?.textContent || '';
-      State.updateText(t.id, { text: newText });
-      Connection.send({ type: 'text:update', id: t.id, text: newText });
-    });
-
-    el.querySelector('.text-delete').addEventListener('click', () => {
-      State.removeText(t.id);
-      Connection.send({ type: 'text:delete', id: t.id });
-      renderObjects();
-    });
-
-    layer.appendChild(el);
+      textEl.classList.add('dragging');
+    }
   });
-}
+
+  layer.addEventListener('click', (e) => {
+    const target = e.target;
+
+    // --- Badge remove ---
+    if (target.classList.contains('tag-remove-btn')) {
+      e.stopPropagation();
+      const tagEl = target.closest('.board-tag');
+      if (tagEl) Connection.send({ type: 'tag:remove', tagId: tagEl.dataset.tagId });
+      return;
+    }
+
+    // --- Box actions ---
+    if (target.classList.contains('box-add-sub-btn')) {
+      e.stopPropagation();
+      const boxEl = target.closest('.process-box');
+      const name = prompt('Sub-box name:');
+      if (name && name.trim()) {
+        Connection.send({ type: 'subbox:add', boxId: boxEl.dataset.boxId, subBox: { id: uid(), name: name.trim() } });
+      }
+      return;
+    }
+
+    if (target.classList.contains('box-rename-btn')) {
+      e.stopPropagation();
+      const boxEl = target.closest('.process-box');
+      showRenameDialog(boxEl.dataset.boxId);
+      return;
+    }
+
+    if (target.classList.contains('box-delete-btn')) {
+      e.stopPropagation();
+      const boxId = target.closest('.process-box').dataset.boxId;
+      State.placedTags = State.placedTags.filter(t => t.boxId !== boxId);
+      State.removeBox(boxId);
+      Connection.send({ type: 'box:delete', id: boxId });
+      renderObjects();
+      renderTagPalette();
+      return;
+    }
+
+    // --- Sub-box delete ---
+    if (target.classList.contains('sub-box-delete-btn')) {
+      e.stopPropagation();
+      const sbEl = target.closest('.sub-box');
+      const boxEl = target.closest('.process-box');
+      Connection.send({ type: 'subbox:delete', boxId: boxEl.dataset.boxId, subBoxId: sbEl.dataset.subBoxId });
+      return;
+    }
+
+    // --- Note delete ---
+    if (target.classList.contains('note-delete')) {
+      const noteEl = target.closest('.sticky-note');
+      State.removeNote(noteEl.dataset.noteId);
+      Connection.send({ type: 'note:delete', id: noteEl.dataset.noteId });
+      renderObjects();
+      return;
+    }
+
+    // --- Text delete ---
+    if (target.classList.contains('text-delete')) {
+      const textEl = target.closest('.text-label');
+      State.removeText(textEl.dataset.textId);
+      Connection.send({ type: 'text:delete', id: textEl.dataset.textId });
+      renderObjects();
+      return;
+    }
+  });
+
+  layer.addEventListener('input', (e) => {
+    const target = e.target;
+
+    // --- Note content edit ---
+    if (target.classList.contains('note-content')) {
+      const noteEl = target.closest('.sticky-note');
+      const noteId = noteEl.dataset.noteId;
+      State.updateNote(noteId, { text: target.value });
+      Connection.send({ type: 'note:update', id: noteId, text: target.value });
+      return;
+    }
+
+    // --- Text label edit ---
+    const textEl = target.closest('.text-label');
+    if (textEl) {
+      const textId = textEl.dataset.textId;
+      const newText = textEl.childNodes[0]?.textContent || '';
+      State.updateText(textId, { text: newText });
+      Connection.send({ type: 'text:update', id: textId, text: newText });
+    }
+  });
+})();
 
 function escapeHtml(str) {
   const el = document.createElement('span');
@@ -1362,7 +1442,14 @@ EventBus.on('ws:tag:placed', (msg) => {
 
 EventBus.on('ws:tag:locked', (msg) => {
   State.updatePlacedTag(msg.id, { lockedBy: msg.lockedBy });
-  renderObjects();
+  // Targeted update — just toggle CSS class on the specific badge
+  const el = document.querySelector(`[data-tag-id="${msg.id}"]`);
+  if (el) {
+    el.classList.toggle('locked', msg.lockedBy && msg.lockedBy !== State.sessionId);
+    el.classList.toggle('locked-by-me', msg.lockedBy === State.sessionId);
+  } else {
+    scheduleRender();
+  }
 });
 
 EventBus.on('ws:tag:lock-denied', (msg) => {
@@ -1424,7 +1511,7 @@ document.addEventListener('visibilitychange', () => {
 
 EventBus.on('ws:tag:moved', (msg) => {
   State.updatePlacedTag(msg.id, { boxId: msg.boxId });
-  renderObjects();
+  scheduleRender();
 });
 
 EventBus.on('ws:tag:unlocked', (msg) => {
@@ -1432,7 +1519,7 @@ EventBus.on('ws:tag:unlocked', (msg) => {
   if (msg.boxId) changes.boxId = msg.boxId;
   if (msg.subBoxId !== undefined) changes.subBoxId = msg.subBoxId;
   State.updatePlacedTag(msg.id, changes);
-  renderObjects();
+  scheduleRender();
 });
 
 EventBus.on('ws:tag:removed', (msg) => {
@@ -1446,8 +1533,19 @@ EventBus.on('ws:box:added', (msg) => {
   if (!State.boxes.find(b => b.id === msg.box.id)) State.addBox(msg.box);
   renderObjects();
 });
-EventBus.on('ws:box:moved', (msg) => { State.updateBox(msg.id, { x: msg.x, y: msg.y }); renderObjects(); });
-EventBus.on('ws:box:resized', (msg) => { State.updateBox(msg.id, { w: msg.w, h: msg.h }); renderObjects(); });
+EventBus.on('ws:box:moved', (msg) => {
+  State.updateBox(msg.id, { x: msg.x, y: msg.y });
+  // Targeted update — just move the element
+  const el = document.querySelector(`[data-box-id="${msg.id}"]`);
+  if (el) { el.style.left = msg.x + 'px'; el.style.top = msg.y + 'px'; }
+  else scheduleRender();
+});
+EventBus.on('ws:box:resized', (msg) => {
+  State.updateBox(msg.id, { w: msg.w, h: msg.h });
+  const el = document.querySelector(`[data-box-id="${msg.id}"]`);
+  if (el) { el.style.width = msg.w + 'px'; el.style.minHeight = msg.h + 'px'; }
+  else scheduleRender();
+});
 EventBus.on('ws:box:renamed', (msg) => { State.updateBox(msg.id, { name: msg.name }); renderObjects(); });
 EventBus.on('ws:box:deleted', (msg) => {
   State.removeBox(msg.id);
@@ -1504,13 +1602,23 @@ EventBus.on('ws:stroke:removed', (msg) => { State.strokes = State.strokes.filter
 // Notes
 EventBus.on('ws:note:added', (msg) => { State.addNote(msg.note); renderObjects(); });
 EventBus.on('ws:note:updated', (msg) => { State.updateNote(msg.id, { text: msg.text }); renderObjects(); });
-EventBus.on('ws:note:moved', (msg) => { State.updateNote(msg.id, { x: msg.x, y: msg.y }); renderObjects(); });
+EventBus.on('ws:note:moved', (msg) => {
+  State.updateNote(msg.id, { x: msg.x, y: msg.y });
+  const el = document.querySelector(`[data-note-id="${msg.id}"]`);
+  if (el) { el.style.left = msg.x + 'px'; el.style.top = msg.y + 'px'; }
+  else scheduleRender();
+});
 EventBus.on('ws:note:deleted', (msg) => { State.removeNote(msg.id); renderObjects(); });
 
 // Texts
 EventBus.on('ws:text:added', (msg) => { State.addText(msg.textObj); renderObjects(); });
 EventBus.on('ws:text:updated', (msg) => { State.updateText(msg.id, { text: msg.text }); renderObjects(); });
-EventBus.on('ws:text:moved', (msg) => { State.updateText(msg.id, { x: msg.x, y: msg.y }); renderObjects(); });
+EventBus.on('ws:text:moved', (msg) => {
+  State.updateText(msg.id, { x: msg.x, y: msg.y });
+  const el = document.querySelector(`[data-text-id="${msg.id}"]`);
+  if (el) { el.style.left = msg.x + 'px'; el.style.top = msg.y + 'px'; }
+  else scheduleRender();
+});
 EventBus.on('ws:text:deleted', (msg) => { State.removeText(msg.id); renderObjects(); });
 
 // Clear
